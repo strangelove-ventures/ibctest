@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -11,23 +12,22 @@ import (
 	"path"
 	"runtime"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/avast/retry-go"
+	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
-	"github.com/cosmos/cosmos-sdk/simapp/params"
+	"github.com/cosmos/cosmos-sdk/simapp"
 	"github.com/cosmos/cosmos-sdk/types"
+	transfertypes "github.com/cosmos/ibc-go/v3/modules/apps/transfer/types"
 	"github.com/ory/dockertest"
 	"github.com/ory/dockertest/docker"
-	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/errgroup"
-
 	tmconfig "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/p2p"
 	rpcclient "github.com/tendermint/tendermint/rpc/client"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	libclient "github.com/tendermint/tendermint/rpc/jsonrpc/client"
+	"golang.org/x/sync/errgroup"
 )
 
 // ChainNode represents a node in the test network that is being created
@@ -41,8 +41,7 @@ type ChainNode struct {
 	Pool         *dockertest.Pool
 	Client       rpcclient.Client
 	Container    *docker.Container
-	t            *testing.T
-	ec           params.EncodingConfig
+	testName     string
 }
 
 // ChainNodes is a collection of ChainNode
@@ -92,9 +91,25 @@ func (tn *ChainNode) NewClient(addr string) error {
 
 }
 
+// CliContext creates a new Cosmos SDK client context
+func (tn *ChainNode) CliContext() client.Context {
+	encoding := simapp.MakeTestEncodingConfig()
+	transfertypes.RegisterInterfaces(encoding.InterfaceRegistry)
+	return client.Context{
+		Client:            tn.Client,
+		ChainID:           tn.Chain.Config().ChainID,
+		InterfaceRegistry: encoding.InterfaceRegistry,
+		Input:             os.Stdin,
+		Output:            os.Stdout,
+		OutputFormat:      "json",
+		LegacyAmino:       encoding.Amino,
+		TxConfig:          encoding.TxConfig,
+	}
+}
+
 // Name is the hostname of the test node container
 func (tn *ChainNode) Name() string {
-	return fmt.Sprintf("node-%d-%s-%s", tn.Index, tn.Chain.Config().ChainID, tn.t.Name())
+	return fmt.Sprintf("node-%d-%s-%s", tn.Index, tn.Chain.Config().ChainID, tn.testName)
 }
 
 // Dir is the directory where the test node files are stored
@@ -161,30 +176,34 @@ func (tn *ChainNode) SetPrivValdidatorListen(peers string) {
 }
 
 // Wait until we have signed n blocks in a row
-func (tn *ChainNode) WaitForBlocks(blocks int64) {
+func (tn *ChainNode) WaitForBlocks(blocks int64) error {
 	stat, err := tn.Client.Status(context.Background())
-	require.NoError(tn.t, err)
+	if err != nil {
+		return err
+	}
 
 	startingBlock := stat.SyncInfo.LatestBlockHeight
-	tn.t.Logf("{WaitForBlocks-%s} Initial Height: %d", tn.Chain.Config().ChainID, startingBlock)
+	fmt.Printf("{WaitForBlocks-%s} Initial Height: %d\n", tn.Chain.Config().ChainID, startingBlock)
 	// timeout after ~1 minute plus block time
 	timeoutSeconds := blocks*int64(blockTime) + int64(60)
 	for i := int64(0); i < timeoutSeconds; i++ {
 		time.Sleep(1 * time.Second)
 
 		stat, err := tn.Client.Status(context.Background())
-		require.NoError(tn.t, err)
+		if err != nil {
+			return err
+		}
 
 		mostRecentBlock := stat.SyncInfo.LatestBlockHeight
 
 		deltaBlocks := mostRecentBlock - startingBlock
 
 		if deltaBlocks >= blocks {
-			tn.t.Logf("{WaitForBlocks-%s} Time (sec) waiting for %d blocks: %d", tn.Chain.Config().ChainID, blocks, i+1)
-			return // done waiting for consecutive signed blocks
+			fmt.Printf("{WaitForBlocks-%s} Time (sec) waiting for %d blocks: %d\n", tn.Chain.Config().ChainID, blocks, i+1)
+			return nil // done waiting for consecutive signed blocks
 		}
 	}
-	require.NoError(tn.t, errors.New("timed out waiting for blocks"))
+	return errors.New("timed out waiting for blocks")
 }
 
 func applyConfigChanges(cfg *tmconfig.Config, peers string) {
@@ -258,32 +277,55 @@ func (tn *ChainNode) CollectGentxs(ctx context.Context) error {
 	return handleNodeJobError(tn.NodeJob(ctx, command))
 }
 
+type IBCTransferTx struct {
+	TxHash string `json:"txhash"`
+}
+
 // CollectGentxs runs collect gentxs on the node's home folders
-func (tn *ChainNode) SendIBCTransfer(ctx context.Context, channelID string, keyName string, amount WalletAmount) error {
+func (tn *ChainNode) SendIBCTransfer(ctx context.Context, channelID string, keyName string, amount WalletAmount, timeout *IBCTimeout) (string, error) {
 	command := []string{tn.Chain.Config().Bin, "tx", "ibc-transfer", "transfer", "transfer", channelID,
 		amount.Address, fmt.Sprintf("%d%s", amount.Amount, amount.Denom),
 		"--keyring-backend", keyring.BackendTest,
 		"--node", fmt.Sprintf("tcp://%s:26657", tn.Name()),
 		"--from", keyName,
+		"--output", "json",
 		"-y",
 		"--home", tn.NodeHome(),
 		"--chain-id", tn.Chain.Config().ChainID,
 	}
-	return handleNodeJobError(tn.NodeJob(ctx, command))
+	if timeout != nil {
+		if timeout.NanoSeconds > 0 {
+			command = append(command, "--packet-timeout-timestamp", fmt.Sprint(timeout.NanoSeconds))
+		} else if timeout.Height > 0 {
+			command = append(command, "--packet-timeout-height", fmt.Sprintf("0-%d", timeout.Height))
+		}
+	}
+	exitCode, stdout, stderr, err := tn.NodeJob(ctx, command)
+	if err != nil {
+		return "", handleNodeJobError(exitCode, stdout, stderr, err)
+	}
+	output := IBCTransferTx{}
+	err = json.Unmarshal([]byte(stdout), &output)
+	if err != nil {
+		return "", err
+	}
+	return output.TxHash, nil
 }
 
 func (tn *ChainNode) CreateNodeContainer() error {
 	chainCfg := tn.Chain.Config()
+	cmd := []string{chainCfg.Bin, "start", "--home", tn.NodeHome()}
+	fmt.Printf("{%s} -> '%s'\n", tn.Name(), strings.Join(cmd, " "))
 	cont, err := tn.Pool.Client.CreateContainer(docker.CreateContainerOptions{
 		Name: tn.Name(),
 		Config: &docker.Config{
 			User:         getDockerUserString(),
-			Cmd:          []string{chainCfg.Bin, "start", "--home", tn.NodeHome()},
+			Cmd:          cmd,
 			Hostname:     tn.Name(),
 			ExposedPorts: sentryPorts,
 			DNS:          []string{},
 			Image:        fmt.Sprintf("%s:%s", chainCfg.Repository, chainCfg.Version),
-			Labels:       map[string]string{"ibc-test": tn.t.Name()},
+			Labels:       map[string]string{"ibc-test": tn.testName},
 		},
 		HostConfig: &docker.HostConfig{
 			Binds:           tn.Bind(),
@@ -320,7 +362,7 @@ func (tn *ChainNode) StartContainer(ctx context.Context) error {
 	tn.Container = c
 
 	port := GetHostPort(c, rpcPort)
-	tn.t.Logf("{%s} RPC => %s", tn.Name(), port)
+	fmt.Printf("{%s} RPC => %s\n", tn.Name(), port)
 
 	err = tn.NewClient(fmt.Sprintf("tcp://%s", port))
 	if err != nil {
@@ -374,12 +416,12 @@ func (tn *ChainNode) InitFullNodeFiles(ctx context.Context) error {
 	return tn.InitHomeFolder(ctx)
 }
 
-func handleNodeJobError(i int, stdout string, stderr string, err error) error {
+func handleNodeJobError(exitCode int, stdout, stderr string, err error) error {
 	if err != nil {
-		return fmt.Errorf("%v\n%s", err, stderr)
+		return err
 	}
-	if i != 0 {
-		return fmt.Errorf("container returned non-zero error code: %d\n%s", i, stderr)
+	if exitCode != 0 {
+		return fmt.Errorf("container returned non-zero error code: %d\n", exitCode)
 	}
 	return nil
 }
@@ -410,24 +452,27 @@ func (tn ChainNodes) PeerString() string {
 			return bldr.String()
 		}
 		ps := fmt.Sprintf("%s@%s:26656,", id, n.Name())
-		tn[0].t.Logf("{%s} peering (%s)", n.Name(), strings.TrimSuffix(ps, ","))
+		fmt.Printf("{%s} peering (%s)\n", n.Name(), strings.TrimSuffix(ps, ","))
 		bldr.WriteString(ps)
 	}
 	return strings.TrimSuffix(bldr.String(), ",")
 }
 
 // LogGenesisHashes logs the genesis hashes for the various nodes
-func (tn ChainNodes) LogGenesisHashes() {
+func (tn ChainNodes) LogGenesisHashes() error {
 	for _, n := range tn {
 		gen, err := ioutil.ReadFile(path.Join(n.Dir(), "config", "genesis.json"))
-		require.NoError(tn[0].t, err)
-		tn[0].t.Log(fmt.Sprintf("{%s} genesis hash %x", n.Name(), sha256.Sum256(gen)))
+		if err != nil {
+			return err
+		}
+		fmt.Printf("{%s} genesis hash %x\n", n.Name(), sha256.Sum256(gen))
 	}
+	return nil
 }
 
-func (tn ChainNodes) WaitForHeight(height int64) {
+func (tn ChainNodes) WaitForHeight(height int64) error {
 	var eg errgroup.Group
-	tn[0].t.Logf("Waiting For Nodes To Reach Block Height %d...", height)
+	fmt.Printf("Waiting For Nodes To Reach Block Height %d...\n", height)
 	for _, n := range tn {
 		n := n
 		eg.Go(func() error {
@@ -440,13 +485,13 @@ func (tn ChainNodes) WaitForHeight(height int64) {
 				if stat.SyncInfo.CatchingUp || stat.SyncInfo.LatestBlockHeight < height {
 					return fmt.Errorf("node still under block %d: %d", height, stat.SyncInfo.LatestBlockHeight)
 				}
-				n.t.Logf("{%s} => reached block %d\n", n.Name(), height)
+				fmt.Printf("{%s} => reached block %d\n", n.Name(), height)
 				return nil
 				// TODO: setup backup delay here
 			}, retry.DelayType(retry.BackOffDelay), retry.Attempts(15))
 		})
 	}
-	require.NoError(tn[0].t, eg.Wait())
+	return eg.Wait()
 }
 
 func getDockerUserString() string {
@@ -468,7 +513,7 @@ func (tn *ChainNode) NodeJob(ctx context.Context, cmd []string) (int, string, st
 	caller := runtime.FuncForPC(counter).Name()
 	funcName := strings.Split(caller, ".")
 	container := fmt.Sprintf("%s-%s-%s", tn.Name(), funcName[len(funcName)-1], RandLowerCaseLetterString(3))
-	tn.t.Logf("{%s}[%s] -> '%s'", tn.Name(), container, strings.Join(cmd, " "))
+	fmt.Printf("{%s} -> '%s'\n", container, strings.Join(cmd, " "))
 	chainCfg := tn.Chain.Config()
 	cont, err := tn.Pool.Client.CreateContainer(docker.CreateContainerOptions{
 		Name: container,
@@ -479,7 +524,7 @@ func (tn *ChainNode) NodeJob(ctx context.Context, cmd []string) (int, string, st
 			DNS:          []string{},
 			Image:        fmt.Sprintf("%s:%s", chainCfg.Repository, chainCfg.Version),
 			Cmd:          cmd,
-			Labels:       map[string]string{"ibc-test": tn.t.Name()},
+			Labels:       map[string]string{"ibc-test": tn.testName},
 		},
 		HostConfig: &docker.HostConfig{
 			Binds:           tn.Bind(),
@@ -505,5 +550,6 @@ func (tn *ChainNode) NodeJob(ctx context.Context, cmd []string) (int, string, st
 	stderr := new(bytes.Buffer)
 	_ = tn.Pool.Client.Logs(docker.LogsOptions{Context: ctx, Container: cont.ID, OutputStream: stdout, ErrorStream: stderr, Stdout: true, Stderr: true, Tail: "100", Follow: false, Timestamps: false})
 	_ = tn.Pool.Client.RemoveContainer(docker.RemoveContainerOptions{ID: cont.ID})
+	fmt.Printf("{%s} - stdout:\n%s\n{%s} - stderr:\n%s\n", container, stdout.String(), container, stderr.String())
 	return exitCode, stdout.String(), stderr.String(), err
 }

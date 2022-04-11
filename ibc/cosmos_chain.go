@@ -6,70 +6,64 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-	"testing"
 
-	"github.com/cosmos/cosmos-sdk/simapp"
 	"github.com/cosmos/cosmos-sdk/types"
+	authTx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	bankTypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 
 	"github.com/ory/dockertest"
 	"github.com/ory/dockertest/docker"
-	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 type CosmosChain struct {
-	t             *testing.T
+	testName      string
 	cfg           ChainConfig
 	numValidators int
 	numFullNodes  int
 	chainNodes    ChainNodes
 }
 
-func NewCosmosChain(
-	t *testing.T,
-	dockerPool *dockertest.Pool,
-	homeDirectory string,
-	networkID string,
-	name string,
-	chainID string,
-	version string,
+func NewCosmosChainConfig(name string,
 	binary string,
 	bech32Prefix string,
 	denom string,
 	gasPrices string,
 	gasAdjustment float64,
-	trustingPeriod string,
-	numValidators int,
-	numFullNodes int,
-) *CosmosChain {
-	chain := &CosmosChain{
-		t: t,
-		cfg: ChainConfig{
-			Type:           "cosmos",
-			Name:           name,
-			ChainID:        chainID,
-			Bech32Prefix:   bech32Prefix,
-			Denom:          denom,
-			GasPrices:      gasPrices,
-			GasAdjustment:  gasAdjustment,
-			TrustingPeriod: trustingPeriod,
-			Repository:     fmt.Sprintf("ghcr.io/strangelove-ventures/heighliner/%s", name),
-			Version:        version,
-			Bin:            binary,
-		},
+	trustingPeriod string) ChainConfig {
+	return ChainConfig{
+		Type:           "cosmos",
+		Name:           name,
+		Bech32Prefix:   bech32Prefix,
+		Denom:          denom,
+		GasPrices:      gasPrices,
+		GasAdjustment:  gasAdjustment,
+		TrustingPeriod: trustingPeriod,
+		Repository:     fmt.Sprintf("ghcr.io/strangelove-ventures/heighliner/%s", name),
+		Bin:            binary,
+	}
+}
+
+func NewCosmosChain(testName string, chainConfig ChainConfig, numValidators int, numFullNodes int) *CosmosChain {
+	return &CosmosChain{
+		testName:      testName,
+		cfg:           chainConfig,
 		numValidators: numValidators,
 		numFullNodes:  numFullNodes,
 	}
-	chain.initializeChainNodes(t, homeDirectory, dockerPool, networkID)
-	return chain
 }
 
 // Implements Chain interface
 func (c *CosmosChain) Config() ChainConfig {
 	return c.cfg
+}
+
+// Implements Chain interface
+func (c *CosmosChain) Initialize(testName string, homeDirectory string, dockerPool *dockertest.Pool, networkID string) error {
+	c.initializeChainNodes(testName, homeDirectory, dockerPool, networkID)
+	return nil
 }
 
 func (c *CosmosChain) getRelayerNode() *ChainNode {
@@ -107,13 +101,13 @@ func (c *CosmosChain) GetAddress(keyName string) ([]byte, error) {
 }
 
 // Implements Chain interface
-func (c *CosmosChain) SendIBCTransfer(ctx context.Context, channelID, keyName string, amount WalletAmount) error {
-	return c.getRelayerNode().SendIBCTransfer(ctx, channelID, keyName, amount)
+func (c *CosmosChain) SendIBCTransfer(ctx context.Context, channelID, keyName string, amount WalletAmount, timeout *IBCTimeout) (string, error) {
+	return c.getRelayerNode().SendIBCTransfer(ctx, channelID, keyName, amount, timeout)
 }
 
 // Implements Chain interface
-func (c *CosmosChain) WaitForBlocks(number int64) {
-	c.getRelayerNode().WaitForBlocks(number)
+func (c *CosmosChain) WaitForBlocks(number int64) error {
+	return c.getRelayerNode().WaitForBlocks(number)
 }
 
 // Implements Chain interface
@@ -136,8 +130,12 @@ func (c *CosmosChain) GetBalance(ctx context.Context, address string, denom stri
 	return res.Balance.Amount.Int64(), nil
 }
 
+func (c *CosmosChain) GetTransaction(ctx context.Context, txHash string) (*types.TxResponse, error) {
+	return authTx.QueryTx(c.getRelayerNode().CliContext(), txHash)
+}
+
 // creates the test node objects required for bootstrapping tests
-func (c *CosmosChain) initializeChainNodes(t *testing.T, home string,
+func (c *CosmosChain) initializeChainNodes(testName, home string,
 	pool *dockertest.Pool, networkID string) {
 	chainNodes := []*ChainNode{}
 	count := c.numValidators + c.numFullNodes
@@ -147,11 +145,11 @@ func (c *CosmosChain) initializeChainNodes(t *testing.T, home string,
 		Tag:        chainCfg.Version,
 	}, docker.AuthConfiguration{})
 	if err != nil {
-		t.Logf("Error pulling image: %v", err)
+		fmt.Printf("error pulling image: %v", err)
 	}
 	for i := 0; i < count; i++ {
 		tn := &ChainNode{Home: home, Index: i, Chain: c,
-			Pool: pool, NetworkID: networkID, t: t, ec: simapp.MakeTestEncodingConfig()}
+			Pool: pool, NetworkID: networkID, testName: testName}
 		tn.MkDir()
 		chainNodes = append(chainNodes, tn)
 	}
@@ -159,7 +157,7 @@ func (c *CosmosChain) initializeChainNodes(t *testing.T, home string,
 }
 
 // Bootstraps the chain and starts it from genesis
-func (c *CosmosChain) Start(t *testing.T, ctx context.Context, additionalGenesisWallets []WalletAmount) {
+func (c *CosmosChain) Start(testName string, ctx context.Context, additionalGenesisWallets []WalletAmount) error {
 	var eg errgroup.Group
 
 	chainCfg := c.Config()
@@ -197,7 +195,9 @@ func (c *CosmosChain) Start(t *testing.T, ctx context.Context, additionalGenesis
 	}
 
 	// wait for this to finish
-	require.NoError(t, eg.Wait())
+	if err := eg.Wait(); err != nil {
+		return err
+	}
 
 	// for the validators we need to collect the gentxs and the accounts
 	// to the first node's genesis file
@@ -205,36 +205,56 @@ func (c *CosmosChain) Start(t *testing.T, ctx context.Context, additionalGenesis
 	for i := 1; i < len(validators); i++ {
 		validatorN := validators[i]
 		n0key, err := validatorN.GetKey(valKey)
-		require.NoError(t, err)
+		if err != nil {
+			return err
+		}
 
 		bech32, err := types.Bech32ifyAddressBytes(chainCfg.Bech32Prefix, n0key.GetAddress().Bytes())
-		require.NoError(t, err)
+		if err != nil {
+			return err
+		}
 
-		require.NoError(t, validator0.AddGenesisAccount(ctx, bech32, genesisAmounts))
+		if err := validator0.AddGenesisAccount(ctx, bech32, genesisAmounts); err != nil {
+			return err
+		}
 		nNid, err := validatorN.NodeID()
-		require.NoError(t, err)
+		if err != nil {
+			return err
+		}
 		oldPath := path.Join(validatorN.Dir(), "config", "gentx", fmt.Sprintf("gentx-%s.json", nNid))
 		newPath := path.Join(validator0.Dir(), "config", "gentx", fmt.Sprintf("gentx-%s.json", nNid))
-		require.NoError(t, os.Rename(oldPath, newPath))
+		if err := os.Rename(oldPath, newPath); err != nil {
+			return err
+		}
 	}
 
 	for _, wallet := range additionalGenesisWallets {
-		require.NoError(t, validator0.AddGenesisAccount(ctx, wallet.Address, []types.Coin{types.Coin{Denom: wallet.Denom, Amount: types.NewInt(wallet.Amount)}}))
+		if err := validator0.AddGenesisAccount(ctx, wallet.Address, []types.Coin{types.Coin{Denom: wallet.Denom, Amount: types.NewInt(wallet.Amount)}}); err != nil {
+			return err
+		}
 	}
 
-	require.NoError(t, validator0.CollectGentxs(ctx))
+	if err := validator0.CollectGentxs(ctx); err != nil {
+		return err
+	}
 
 	genbz, err := ioutil.ReadFile(validator0.GenesisFilePath())
-	require.NoError(t, err)
+	if err != nil {
+		return err
+	}
 
 	nodes := validators
 	nodes = append(nodes, fullnodes...)
 
 	for i := 1; i < len(nodes); i++ {
-		require.NoError(t, ioutil.WriteFile(nodes[i].GenesisFilePath(), genbz, 0644)) //nolint
+		if err := ioutil.WriteFile(nodes[i].GenesisFilePath(), genbz, 0644); err != nil { //nolint
+			return err
+		}
 	}
 
-	ChainNodes(nodes).LogGenesisHashes()
+	if err := ChainNodes(nodes).LogGenesisHashes(); err != nil {
+		return err
+	}
 
 	for _, n := range nodes {
 		n := n
@@ -242,20 +262,24 @@ func (c *CosmosChain) Start(t *testing.T, ctx context.Context, additionalGenesis
 			return n.CreateNodeContainer()
 		})
 	}
-	require.NoError(t, eg.Wait())
+	if err := eg.Wait(); err != nil {
+		return err
+	}
 
 	peers := ChainNodes(nodes).PeerString()
 
 	for _, n := range nodes {
 		n := n
-		t.Logf("{%s} => starting container...", n.Name())
+		fmt.Printf("{%s} => starting container...\n", n.Name())
 		eg.Go(func() error {
 			n.SetValidatorConfigAndPeers(peers)
 			return n.StartContainer(ctx)
 		})
 	}
-	require.NoError(t, eg.Wait())
+	if err := eg.Wait(); err != nil {
+		return err
+	}
 
 	// Wait for 5 blocks before considering the chains "started"
-	c.getRelayerNode().WaitForBlocks(5)
+	return c.getRelayerNode().WaitForBlocks(5)
 }

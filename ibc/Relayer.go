@@ -37,14 +37,17 @@ type Relayer interface {
 	// generate new path between two chains
 	GeneratePath(ctx context.Context, srcChainID, dstChainID, pathName string) error
 
+	// setup channels, connections, and clients
+	LinkPath(ctx context.Context, pathName string) error
+
 	// get channel IDs for chain
 	GetChannels(ctx context.Context, chainID string) ([]ChannelOutput, error)
 
 	// after configuration is initialized, begin relaying
 	StartRelayer(ctx context.Context, pathName string) error
 
-	// wait until all existing packets are relayed
-	ClearQueue(ctx context.Context) error
+	// relay queue until it is empty
+	ClearQueue(ctx context.Context, pathName string, channelID string) error
 
 	// shutdown relayer
 	StopRelayer(ctx context.Context) error

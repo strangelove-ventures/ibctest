@@ -1,7 +1,7 @@
 package main
 
-import "fmt"
+import "github.com/strangelove-ventures/ibc-test-framework/cmd"
 
 func main() {
-	fmt.Println("IBC Test Framework")
+	cmd.Execute()
 }

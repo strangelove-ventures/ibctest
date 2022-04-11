@@ -9,7 +9,6 @@ import (
 	"os"
 	"runtime"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
@@ -24,7 +23,7 @@ type CosmosRelayer struct {
 	container *docker.Container
 	networkID string
 	home      string
-	t         *testing.T
+	testName  string
 }
 
 type CosmosRelayerChainConfigValue struct {
@@ -72,14 +71,14 @@ func ChainConfigToCosmosRelayerChainConfig(chainConfig ChainConfig, keyName, rpc
 	}
 }
 
-func NewCosmosRelayerFromChains(t *testing.T, src, dst Chain, pool *dockertest.Pool, networkID string, home string) *CosmosRelayer {
+func NewCosmosRelayerFromChains(testName string, src, dst Chain, pool *dockertest.Pool, networkID string, home string) *CosmosRelayer {
 	relayer := &CosmosRelayer{
 		src:       src,
 		dst:       dst,
 		pool:      pool,
 		networkID: networkID,
 		home:      home,
-		t:         t,
+		testName:  testName,
 	}
 	relayer.MkDir()
 
@@ -87,10 +86,10 @@ func NewCosmosRelayerFromChains(t *testing.T, src, dst Chain, pool *dockertest.P
 }
 
 func (relayer *CosmosRelayer) Name() string {
-	return fmt.Sprintf("rly-%s", relayer.t.Name())
+	return fmt.Sprintf("rly-%s", relayer.testName)
 }
 
-func (relayer *CosmosRelayer) linkPath(ctx context.Context, pathName string) error {
+func (relayer *CosmosRelayer) LinkPath(ctx context.Context, pathName string) error {
 	command := []string{"rly", "tx", "link", pathName,
 		"--home", relayer.NodeHome(),
 	}
@@ -125,10 +124,6 @@ func (relayer *CosmosRelayer) GetChannels(ctx context.Context, chainID string) (
 
 // Implements Relayer interface
 func (relayer *CosmosRelayer) StartRelayer(ctx context.Context, pathName string) error {
-	err := relayer.linkPath(ctx, pathName)
-	if err != nil {
-		return err
-	}
 	return relayer.CreateNodeContainer(pathName)
 }
 
@@ -138,9 +133,9 @@ func (relayer *CosmosRelayer) StopRelayer(ctx context.Context) error {
 }
 
 // Implements Relayer interface
-func (relayer *CosmosRelayer) ClearQueue(ctx context.Context) error {
-	// TODO
-	return nil
+func (relayer *CosmosRelayer) ClearQueue(ctx context.Context, pathName string, channelID string) error {
+	command := []string{"rly", "tx", "relay-pkts", pathName, channelID, "--home", relayer.NodeHome()}
+	return handleNodeJobError(relayer.NodeJob(ctx, command))
 }
 
 // Implements Relayer interface
@@ -195,15 +190,17 @@ func (relayer *CosmosRelayer) CreateNodeContainer(pathName string) error {
 		return err
 	}
 	containerName := fmt.Sprintf("%s-%s", relayer.Name(), pathName)
+	cmd := []string{"rly", "start", pathName, "--home", relayer.NodeHome()}
+	fmt.Printf("{%s} -> '%s'\n", containerName, strings.Join(cmd, " "))
 	cont, err := relayer.pool.Client.CreateContainer(docker.CreateContainerOptions{
 		Name: containerName,
 		Config: &docker.Config{
 			User:       getDockerUserString(),
-			Cmd:        []string{"rly", "start", pathName, "--home", relayer.NodeHome()},
+			Cmd:        cmd,
 			Entrypoint: []string{},
 			Hostname:   containerName,
 			Image:      fmt.Sprintf("%s:%s", containerImage, containerVersion),
-			Labels:     map[string]string{"ibc-test": relayer.t.Name()},
+			Labels:     map[string]string{"ibc-test": relayer.testName},
 		},
 		NetworkingConfig: &docker.NetworkingConfig{
 			EndpointsConfig: map[string]*docker.EndpointConfig{
@@ -239,7 +236,7 @@ func (relayer *CosmosRelayer) NodeJob(ctx context.Context, cmd []string) (int, s
 	caller := runtime.FuncForPC(counter).Name()
 	funcName := strings.Split(caller, ".")
 	container := fmt.Sprintf("%s-%s-%s", relayer.Name(), funcName[len(funcName)-1], RandLowerCaseLetterString(3))
-	fmt.Printf("%s -> '%s'", container, strings.Join(cmd, " "))
+	fmt.Printf("{%s} -> '%s'\n", container, strings.Join(cmd, " "))
 	cont, err := relayer.pool.Client.CreateContainer(docker.CreateContainerOptions{
 		Name: container,
 		Config: &docker.Config{
@@ -271,6 +268,7 @@ func (relayer *CosmosRelayer) NodeJob(ctx context.Context, cmd []string) (int, s
 	stderr := new(bytes.Buffer)
 	_ = relayer.pool.Client.Logs(docker.LogsOptions{Context: ctx, Container: cont.ID, OutputStream: stdout, ErrorStream: stderr, Stdout: true, Stderr: true, Tail: "100", Follow: false, Timestamps: false})
 	_ = relayer.pool.Client.RemoveContainer(docker.RemoveContainerOptions{ID: cont.ID})
+	fmt.Printf("{%s} - stdout:\n%s\n{%s} - stderr:\n%s\n", container, stdout.String(), container, stderr.String())
 	return exitCode, stdout.String(), stderr.String(), err
 }
 
