@@ -48,7 +48,7 @@ type CosmosRelayerChainConfig struct {
 
 var (
 	containerImage   = "ghcr.io/cosmos/relayer"
-	containerVersion = "v2.0.0-beta4"
+	containerVersion = "latest"
 )
 
 func ChainConfigToCosmosRelayerChainConfig(chainConfig ChainConfig, keyName, rpcAddr, gprcAddr string) CosmosRelayerChainConfig {
@@ -120,6 +120,35 @@ func (relayer *CosmosRelayer) GetChannels(ctx context.Context, chainID string) (
 	}
 
 	return channels, handleNodeJobError(exitCode, stdout, stderr, err)
+}
+
+// GetConnections queries all available connections for the specified chainID.
+func (relayer *CosmosRelayer) GetConnections(ctx context.Context, chainID string) ([]*ConnectionOutput, error) {
+	command := []string{"rly", "q", "connections", chainID,
+		"--home", relayer.NodeHome(),
+	}
+	exitCode, stdout, stderr, err := relayer.NodeJob(ctx, command)
+	if err != nil {
+		return nil, handleNodeJobError(exitCode, stdout, stderr, err)
+	}
+
+	var connections []*ConnectionOutput
+	connectionSplit := strings.Split(stdout, "\n")
+
+	for _, connection := range connectionSplit {
+		if strings.TrimSpace(connection) == "" {
+			continue
+		}
+		connectionOutput := ConnectionOutput{}
+		err := json.Unmarshal([]byte(connection), &connectionOutput)
+		if err != nil {
+			fmt.Printf("error parsing connections json: %v\n", err)
+			continue
+		}
+		connections = append(connections, &connectionOutput)
+	}
+
+	return connections, handleNodeJobError(exitCode, stdout, stderr, err)
 }
 
 // Implements Relayer interface
@@ -334,4 +363,24 @@ func (relayer *CosmosRelayer) Bind() []string {
 
 func (relayer *CosmosRelayer) StopContainer() error {
 	return relayer.pool.Client.StopContainer(relayer.container.ID, uint(time.Second*30))
+}
+
+// CreateClients performs the client handshake steps necessary for creating a light client on both the src
+// and dst chains of the specified path.
+func (relayer *CosmosRelayer) CreateClients(ctx context.Context, pathName string) error {
+	command := []string{"rly", "tx", "clients", pathName,
+		"--home", relayer.NodeHome(),
+	}
+
+	return handleNodeJobError(relayer.NodeJob(ctx, command))
+}
+
+// CreateConnections performs the connection handshake steps necessary for creating a connection between
+// the src and dst chains of the specified path.
+func (relayer *CosmosRelayer) CreateConnections(ctx context.Context, pathName string) error {
+	command := []string{"rly", "tx", "connection", pathName,
+		"--home", relayer.NodeHome(),
+	}
+
+	return handleNodeJobError(relayer.NodeJob(ctx, command))
 }

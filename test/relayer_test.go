@@ -21,6 +21,19 @@ func getTestChains(t *testing.T) (ibc.Chain, ibc.Chain) {
 	return srcChain, dstChain
 }
 
+// getICATestChains will return two chains that are configured with the interchain accounts module.
+func getICATestChains(t *testing.T) (ibc.Chain, ibc.Chain) {
+	numValidatorsPerChain := 4
+	numFullNodesPerChain := 1
+
+	srcChain, err := ibc.GetChain(t.Name(), "icad", "master", "icad-1001", numValidatorsPerChain, numFullNodesPerChain)
+	require.NoError(t, err)
+	dstChain, err := ibc.GetChain(t.Name(), "icad", "master", "icad-1002", numValidatorsPerChain, numFullNodesPerChain)
+	require.NoError(t, err)
+
+	return srcChain, dstChain
+}
+
 // queued packet with default timeout should be relayed
 func TestRelayPacket(t *testing.T) {
 	srcChain, dstChain := getTestChains(t)
@@ -47,9 +60,18 @@ func TestHeightTimeout(t *testing.T) {
 
 // queued packet with relative timestamp timeout (ns) that expires should not be relayed
 func TestTimestampTimeout(t *testing.T) {
-	t.Skip() // TODO turn this back on once fixed in cosmos relayer
+	//t.Skip() // TODO turn this back on once fixed in cosmos relayer
 	srcChain, dstChain := getTestChains(t)
 	relayerImplementation := ibc.CosmosRly
 
 	require.NoError(t, ibc.IBCTestCase{}.RelayPacketTestTimestampTimeout(t.Name(), srcChain, dstChain, relayerImplementation))
+}
+
+// TestInterchainAccounts will test the interchain accounts channel initialization, packet sending, packet timeout and
+// reopening a closed channel.
+func TestInterchainAccounts(t *testing.T) {
+	srcChain, dstChain := getICATestChains(t)
+	relayerImplementation := ibc.CosmosRly
+
+	require.NoError(t, ibc.IBCTestCase{}.RelayerInterchainAccountTest(t, t.Name(), srcChain, dstChain, relayerImplementation))
 }

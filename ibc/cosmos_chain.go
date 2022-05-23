@@ -468,7 +468,7 @@ func (c *CosmosChain) Start(testName string, ctx context.Context, additionalGene
 	}
 
 	for _, wallet := range additionalGenesisWallets {
-		if err := validator0.AddGenesisAccount(ctx, wallet.Address, []types.Coin{types.Coin{Denom: wallet.Denom, Amount: types.NewInt(wallet.Amount)}}); err != nil {
+		if err := validator0.AddGenesisAccount(ctx, wallet.Address, []types.Coin{{Denom: wallet.Denom, Amount: types.NewInt(wallet.Amount)}}); err != nil {
 			return err
 		}
 	}
@@ -522,4 +522,20 @@ func (c *CosmosChain) Start(testName string, ctx context.Context, additionalGene
 	// Wait for 5 blocks before considering the chains "started"
 	_, err = c.getRelayerNode().WaitForBlocks(5)
 	return err
+}
+
+// RegisterInterchainAccount will register an interchain account, on behalf of the controller chain (the calling chain),
+// on the controller chain (the dst chain).
+func (c *CosmosChain) RegisterInterchainAccount(ctx context.Context, address, connectionID string) (string, error) {
+	return c.getRelayerNode().RegisterICA(ctx, address, connectionID)
+}
+
+// QueryInterchainAccount will query the interchain account that was created on behalf of the specified address.
+func (c *CosmosChain) QueryInterchainAccount(ctx context.Context, connectionID, address string) (string, error) {
+	return c.getRelayerNode().QueryICA(ctx, connectionID, address)
+}
+
+// SendICABankTransfer will send a bank transfer msg from the fromAddr to the toAddr for the given amount and denom.
+func (c *CosmosChain) SendICABankTransfer(ctx context.Context, connectionID, fromAddr, toAddr, denom string, amount int64) error {
+	return c.getRelayerNode().SendICABankTransfer(ctx, connectionID, fromAddr, toAddr, denom, amount)
 }

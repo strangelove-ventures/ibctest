@@ -2,6 +2,8 @@ package ibc
 
 import (
 	"context"
+
+	ibcexported "github.com/cosmos/ibc-go/v3/modules/core/03-connection/types"
 )
 
 type ChannelCounterparty struct {
@@ -17,6 +19,15 @@ type ChannelOutput struct {
 	Version        string              `json:"version"`
 	PortID         string              `json:"port_id"`
 	ChannelID      string              `json:"channel_id"`
+}
+
+type ConnectionOutput struct {
+	ID           string                    `json:"id,omitempty" yaml:"id"`
+	ClientID     string                    `json:"client_id,omitempty" yaml:"client_id"`
+	Versions     []*ibcexported.Version    `json:"versions,omitempty" yaml:"versions"`
+	State        string                    `json:"state,omitempty" yaml:"state"`
+	Counterparty *ibcexported.Counterparty `json:"counterparty" yaml:"counterparty"`
+	DelayPeriod  string                    `json:"delay_period,omitempty" yaml:"delay_period"`
 }
 
 type RelayerWallet struct {
@@ -46,6 +57,9 @@ type Relayer interface {
 	// get channel IDs for chain
 	GetChannels(ctx context.Context, chainID string) ([]ChannelOutput, error)
 
+	// GetConnections returns the Connection information for a specified chain.
+	GetConnections(ctx context.Context, chainID string) ([]*ConnectionOutput, error)
+
 	// after configuration is initialized, begin relaying
 	StartRelayer(ctx context.Context, pathName string) error
 
@@ -54,4 +68,12 @@ type Relayer interface {
 
 	// shutdown relayer
 	StopRelayer(ctx context.Context) error
+
+	// CreateClients performs the client handshake steps necessary for creating a light client
+	// on src that tracks the state of dst, and a light client on dst that tracks the state of src.
+	CreateClients(ctx context.Context, pathName string) error
+
+	// CreateConnections performs the connection handshake steps necessary for creating a connection
+	// between the src and dst chains.
+	CreateConnections(ctx context.Context, pathName string) error
 }

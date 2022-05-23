@@ -93,4 +93,14 @@ type Chain interface {
 
 	// fetch transaction
 	GetTransaction(ctx context.Context, txHash string) (*types.TxResponse, error)
+
+	// RegisterInterchainAccount will register an interchain account on behalf of the calling chain (controller chain)
+	// on the counterparty chain (the host chain).
+	RegisterInterchainAccount(ctx context.Context, keyName, connectionID string) (string, error)
+
+	// SendICABankTransfer will send a bank transfer msg from the fromAddr to the toAddr for the given amount and denom.
+	SendICABankTransfer(ctx context.Context, connectionID, fromAddr, toAddr, denom string, amount int64) error
+
+	// QueryInterchainAccount will query the interchain account that was created on behalf of the specified address.
+	QueryInterchainAccount(ctx context.Context, connectionID, address string) (string, error)
 }

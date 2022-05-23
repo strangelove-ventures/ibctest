@@ -30,6 +30,7 @@ import (
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	libclient "github.com/tendermint/tendermint/rpc/jsonrpc/client"
 	"golang.org/x/sync/errgroup"
+	"gopkg.in/yaml.v3"
 )
 
 // ChainNode represents a node in the test network that is being created
@@ -304,7 +305,7 @@ func (tn *ChainNode) CollectGentxs(ctx context.Context) error {
 }
 
 type IBCTransferTx struct {
-	TxHash string `json:"txhash"`
+	TxHash string `json:"txhash" yaml:"txhash"`
 }
 
 // CollectGentxs runs collect gentxs on the node's home folders
@@ -834,4 +835,70 @@ func (tn *ChainNode) NodeJob(ctx context.Context, cmd []string) (int, string, st
 	_ = tn.Pool.Client.RemoveContainer(docker.RemoveContainerOptions{ID: cont.ID})
 	fmt.Printf("{%s} - stdout:\n%s\n{%s} - stderr:\n%s\n", container, stdout.String(), container, stderr.String())
 	return exitCode, stdout.String(), stderr.String(), err
+}
+
+func (tn *ChainNode) RegisterICA(ctx context.Context, address, connectionID string) (string, error) {
+	command := []string{tn.Chain.Config().Bin, "tx", "intertx", "register",
+		"--from", address,
+		"--connection-id", connectionID,
+		"--chain-id", tn.Chain.Config().ChainID,
+		"--home", tn.NodeHome(),
+		"--node", fmt.Sprintf("tcp://%s:26657", tn.Name()),
+		"--keyring-backend", keyring.BackendTest,
+		"-y",
+	}
+
+	exitCode, stdout, stderr, err := tn.NodeJob(ctx, command)
+	if err != nil {
+		return "", handleNodeJobError(exitCode, stdout, stderr, err)
+	}
+	output := IBCTransferTx{}
+	err = yaml.Unmarshal([]byte(stdout), &output)
+	if err != nil {
+		return "", err
+	}
+	return output.TxHash, nil
+}
+
+func (tn *ChainNode) QueryICA(ctx context.Context, connectionID, address string) (string, error) {
+	command := []string{tn.Chain.Config().Bin, "query", "intertx", "interchainaccounts", connectionID, address,
+		"--chain-id", tn.Chain.Config().ChainID,
+		"--home", tn.NodeHome(),
+		"--node", fmt.Sprintf("tcp://%s:26657", tn.Name())}
+
+	exitCode, stdout, stderr, err := tn.NodeJob(ctx, command)
+	if err != nil {
+		return "", handleNodeJobError(exitCode, stdout, stderr, err)
+	}
+
+	// at this point stdout should look like this:
+	// interchain_account_address: cosmos1p76n3mnanllea4d3av0v0e42tjj03cae06xq8fwn9at587rqp23qvxsv0j
+	// we split the string at the : and then just grab the address before returning.
+	parts := strings.SplitN(stdout, ":", 2)
+	return strings.TrimSpace(parts[1]), nil
+}
+
+func (tn *ChainNode) SendICABankTransfer(ctx context.Context, connectionID, fromAddr, toAddr, denom string, amount int64) error {
+	msg := fmt.Sprintf(`{
+	"@type":"/cosmos.bank.v1beta1.MsgSend",
+	"from_address":"%s",
+	"to_address":"%s",
+	"amount": [
+	{
+		"denom": "%s",
+		"amount": "%d"
+	}
+	]}`, fromAddr, toAddr, denom, amount)
+
+	command := []string{tn.Chain.Config().Bin, "tx", "intertx", "submit", msg,
+		"--connection-id", connectionID,
+		"--from", fromAddr,
+		"--chain-id", tn.Chain.Config().ChainID,
+		"--home", tn.NodeHome(),
+		"--node", fmt.Sprintf("tcp://%s:26657", tn.Name()),
+		"--keyring-backend", keyring.BackendTest,
+		"-y",
+	}
+
+	return handleNodeJobError(tn.NodeJob(ctx, command))
 }
