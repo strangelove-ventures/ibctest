@@ -11,6 +11,7 @@ require (
 	github.com/gdamore/tcell/v2 v2.4.1-0.20210905002822-f057f0a857a1
 	github.com/google/go-cmp v0.5.7
 	github.com/ory/dockertest/v3 v3.8.1
+	github.com/pelletier/go-toml/v2 v2.0.1
 	github.com/rivo/tview v0.0.0-20220307222120-9994674d60a8
 	github.com/stretchr/testify v1.7.2
 	github.com/tendermint/tendermint v0.34.14
