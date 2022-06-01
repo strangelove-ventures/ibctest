@@ -69,7 +69,7 @@ func Capabilities() map[relayer.Capability]bool {
 	return m
 }
 
-func ChainConfigToCosmosRelayerChainConfig(chainConfig ibc.ChainConfig, keyName, rpcAddr, gprcAddr string) CosmosRelayerChainConfig {
+func ChainConfigToCosmosRelayerChainConfig(chainConfig ibc.ChainConfig, keyName, rpcAddr, gprcAddr, websocketAddr string) CosmosRelayerChainConfig {
 	return CosmosRelayerChainConfig{
 		Type: chainConfig.Type,
 		Value: CosmosRelayerChainConfigValue{
@@ -194,8 +194,8 @@ func (commander) UpdateClients(pathName, homeDir string) []string {
 	}
 }
 
-func (commander) ConfigContent(ctx context.Context, cfg ibc.ChainConfig, keyName, rpcAddr, grpcAddr string) ([]byte, error) {
-	cosmosRelayerChainConfig := ChainConfigToCosmosRelayerChainConfig(cfg, keyName, rpcAddr, grpcAddr)
+func (commander) ConfigContent(ctx context.Context, cfg ibc.ChainConfig, keyName, rpcAddr, grpcAddr, websocketAddr string) ([]byte, error) {
+	cosmosRelayerChainConfig := ChainConfigToCosmosRelayerChainConfig(cfg, keyName, rpcAddr, grpcAddr, websocketAddr)
 	jsonBytes, err := json.Marshal(cosmosRelayerChainConfig)
 	if err != nil {
 		return nil, err

@@ -54,7 +54,7 @@ func NewDockerRelayer(log *zap.Logger, testName, home string, pool *dockertest.P
 	}
 }
 
-func (r *DockerRelayer) AddChainConfiguration(ctx context.Context, rep ibc.RelayerExecReporter, chainConfig ibc.ChainConfig, keyName, rpcAddr, grpcAddr string) error {
+func (r *DockerRelayer) AddChainConfiguration(ctx context.Context, rep ibc.RelayerExecReporter, chainConfig ibc.ChainConfig, keyName, rpcAddr, grpcAddr, websocketAddr string) error {
 	// rly needs to run "rly config init", and AddChainConfiguration should be the first call where it's needed.
 	// This might be a better fit for NewDockerRelayer, but that would considerably change the function signature.
 	if !r.didInit {
@@ -75,7 +75,7 @@ func (r *DockerRelayer) AddChainConfiguration(ctx context.Context, rep ibc.Relay
 	chainConfigLocalFilePath := filepath.Join(r.Dir(), chainConfigFile)
 	chainConfigContainerFilePath := fmt.Sprintf("%s/%s", r.NodeHome(), chainConfigFile)
 
-	configContent, err := r.c.ConfigContent(ctx, chainConfig, keyName, rpcAddr, grpcAddr)
+	configContent, err := r.c.ConfigContent(ctx, chainConfig, keyName, rpcAddr, "", grpcAddr)
 	if err != nil {
 		return fmt.Errorf("failed to generate config content: %w", err)
 	}
@@ -370,7 +370,7 @@ type RelayerCommander interface {
 	ContainerVersion() string
 
 	// ConfigContent generates the content of the config file that will be passed to AddChainConfiguration.
-	ConfigContent(ctx context.Context, cfg ibc.ChainConfig, keyName, rpcAddr, grpcAddr string) ([]byte, error)
+	ConfigContent(ctx context.Context, cfg ibc.ChainConfig, keyName, rpcAddr, grpcAddr, websocketAddr string) ([]byte, error)
 
 	// ParseAddKeyOutput processes the output of AddKey
 	// to produce the wallet that was created.

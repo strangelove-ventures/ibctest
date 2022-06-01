@@ -9,7 +9,8 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/google/go-cmp v0.5.7
 	github.com/ory/dockertest/v3 v3.8.1
-	github.com/stretchr/testify v1.7.0
+	github.com/pelletier/go-toml/v2 v2.0.1
+	github.com/stretchr/testify v1.7.1
 	github.com/tendermint/tendermint v0.34.14
 	go.uber.org/multierr v1.6.0
 	go.uber.org/zap v1.21.0

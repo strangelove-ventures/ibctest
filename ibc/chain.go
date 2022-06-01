@@ -28,9 +28,16 @@ type Chain interface {
 	// retrieves grpc address that can be reached by other containers in the docker network
 	GetGRPCAddress() string
 
+	// retrieves websocket address that can be reached by other containers in the docker network
+	GetWebsocketAddress() string
+
 	// GetHostRPCAddress returns the rpc address that can be reached by processes on the host machine.
 	// Note that this will not return a valid value until after Start returns.
 	GetHostRPCAddress() string
+
+	// GetHostWebsocketAddress returns the websocket endpoint that can be reached by processes on the host machine.
+	// Note that this will not return a valid value until after Start returns.
+	GetHostWebsocketAddress() string
 
 	// GetHostGRPCAddress returns the grpc address that can be reached by processes on the host machine.
 	// Note that this will not return a valid value until after Start returns.

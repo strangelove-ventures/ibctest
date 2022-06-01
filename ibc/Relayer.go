@@ -25,7 +25,7 @@ type Relayer interface {
 	AddKey(ctx context.Context, rep RelayerExecReporter, chainID, keyName string) (RelayerWallet, error)
 
 	// add relayer configuration for a chain
-	AddChainConfiguration(ctx context.Context, rep RelayerExecReporter, chainConfig ChainConfig, keyName, rpcAddr, grpcAddr string) error
+	AddChainConfiguration(ctx context.Context, rep RelayerExecReporter, chainConfig ChainConfig, keyName, rpcAddr, grpcAddr, websocketAddr string) error
 
 	// generate new path between two chains
 	GeneratePath(ctx context.Context, rep RelayerExecReporter, srcChainID, dstChainID, pathName string) error

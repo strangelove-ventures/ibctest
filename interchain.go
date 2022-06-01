@@ -266,16 +266,16 @@ func (ic *Interchain) configureRelayerKeys(ctx context.Context, rep *testreporte
 
 	for r, chains := range ic.relayerChains() {
 		for _, c := range chains {
-			rpcAddr, grpcAddr := c.GetRPCAddress(), c.GetGRPCAddress()
+			rpcAddr, grpcAddr, websocket := c.GetRPCAddress(), c.GetGRPCAddress(), c.GetWebsocketAddress()
 			if !r.UseDockerNetwork() {
-				rpcAddr, grpcAddr = c.GetHostRPCAddress(), c.GetHostGRPCAddress()
+				rpcAddr, grpcAddr, websocket = c.GetHostRPCAddress(), c.GetHostGRPCAddress(), c.GetHostWebsocketAddress()
 			}
 
 			chainName := ic.chains[c]
 			if err := r.AddChainConfiguration(ctx,
 				rep,
 				c.Config(), chainName,
-				rpcAddr, grpcAddr,
+				rpcAddr, grpcAddr, websocket,
 			); err != nil {
 				return fmt.Errorf("failed to configure relayer %s for chain %s: %w", ic.relayers[r], chainName, err)
 			}

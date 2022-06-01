@@ -123,6 +123,11 @@ func (c *PenumbraChain) GetGRPCAddress() string {
 	return fmt.Sprintf("%s:9090", c.getRelayerNode().TendermintNode.HostName())
 }
 
+// Implements Chain interface
+func (c *PenumbraChain) GetWebsocketAddress() string {
+	return fmt.Sprintf("ws://%s:26657/websocket", c.getRelayerNode().TendermintNode.HostName())
+}
+
 // GetHostRPCAddress returns the address of the RPC server accessible by the host.
 // This will not return a valid address until the chain has been started.
 func (c *PenumbraChain) GetHostRPCAddress() string {
@@ -133,6 +138,12 @@ func (c *PenumbraChain) GetHostRPCAddress() string {
 // This will not return a valid address until the chain has been started.
 func (c *PenumbraChain) GetHostGRPCAddress() string {
 	return dockerutil.GetHostPort(c.getRelayerNode().TendermintNode.Container, grpcPort)
+}
+
+// GetHostWebsocketAddress returns the address of the websocket stream accessible by the host.
+// This will not return a valid address until the chain has been started.
+func (c *PenumbraChain) GetHostWebsocketAddress() string {
+	return "ws://" + dockerutil.GetHostPort(c.getRelayerNode().TendermintNode.Container, rpcPort) + "/websocket"
 }
 
 // Implements Chain interface

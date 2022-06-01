@@ -107,6 +107,11 @@ func (c *CosmosChain) GetGRPCAddress() string {
 	return fmt.Sprintf("%s:9090", c.getFullNode().HostName())
 }
 
+// Implements Chain interface
+func (c *CosmosChain) GetWebsocketAddress() string {
+	return fmt.Sprintf("ws://%s:26657/websocket", c.getFullNode().HostName())
+}
+
 // GetHostRPCAddress returns the address of the RPC server accessible by the host.
 // This will not return a valid address until the chain has been started.
 func (c *CosmosChain) GetHostRPCAddress() string {
@@ -117,6 +122,12 @@ func (c *CosmosChain) GetHostRPCAddress() string {
 // This will not return a valid address until the chain has been started.
 func (c *CosmosChain) GetHostGRPCAddress() string {
 	return dockerutil.GetHostPort(c.getFullNode().Container, grpcPort)
+}
+
+// GetHostWebsocketAddress returns the address of the websocket stream accessible by the host.
+// This will not return a valid address until the chain has been started.
+func (c *CosmosChain) GetHostWebsocketAddress() string {
+	return "ws://" + dockerutil.GetHostPort(c.getFullNode().Container, rpcPort) + "/websocket"
 }
 
 // Implements Chain interface
