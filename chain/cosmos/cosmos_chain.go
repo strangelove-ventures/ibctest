@@ -33,6 +33,7 @@ type CosmosChain struct {
 	numValidators int
 	numFullNodes  int
 	ChainNodes    ChainNodes
+	opts          []ibc.ChainOption
 
 	log *zap.Logger
 }
@@ -79,7 +80,8 @@ func (c *CosmosChain) Config() ibc.ChainConfig {
 }
 
 // Implements Chain interface
-func (c *CosmosChain) Initialize(testName string, homeDirectory string, cli *client.Client, networkID string) error {
+func (c *CosmosChain) Initialize(testName string, homeDirectory string, cli *client.Client, networkID string, opts ...ibc.ChainOption) error {
+	c.opts = opts
 	c.initializeChainNodes(testName, homeDirectory, cli, networkID)
 	return nil
 }
@@ -262,16 +264,16 @@ func (c *CosmosChain) GetGasFeesInNativeDenom(gasPaid int64) int64 {
 	return int64(fees)
 }
 
-// creates the test node objects required for bootstrapping tests
-func (c *CosmosChain) initializeChainNodes(
-	testName, home string,
-	cli *client.Client,
-	networkID string,
-) {
-	var chainNodes []*ChainNode
-	count := c.numValidators + c.numFullNodes
-	chainCfg := c.Config()
-	for _, image := range chainCfg.Images {
+func (c *CosmosChain) UpgradeVersion(cli *client.Client, version string) {
+	c.cfg.Images[0].Version = version
+	for _, n := range c.ChainNodes {
+		n.Image.Version = version
+	}
+	c.pullImages(cli)
+}
+
+func (c *CosmosChain) pullImages(cli *client.Client) {
+	for _, image := range c.Config().Images {
 		rc, err := cli.ImagePull(
 			context.TODO(),
 			image.Repository+":"+image.Version,
@@ -288,6 +290,18 @@ func (c *CosmosChain) initializeChainNodes(
 			_ = rc.Close()
 		}
 	}
+}
+
+// creates the test node objects required for bootstrapping tests
+func (c *CosmosChain) initializeChainNodes(
+	testName, home string,
+	cli *client.Client,
+	networkID string,
+) {
+	var chainNodes []*ChainNode
+	count := c.numValidators + c.numFullNodes
+	chainCfg := c.Config()
+	c.pullImages(cli)
 	for i := 0; i < count; i++ {
 		tn := &ChainNode{
 			log: c.log,
@@ -350,11 +364,22 @@ func (c *CosmosChain) Start(testName string, ctx context.Context, additionalGene
 	validators := c.ChainNodes[:c.numValidators]
 	fullnodes := c.ChainNodes[c.numValidators:]
 
+	haltHeight := uint64(0)
+
+	for _, opt := range c.opts {
+		switch o := opt.(type) {
+		case ibc.ChainOptionHaltHeight:
+			haltHeight = o.Height
+		}
+	}
+
 	eg := new(errgroup.Group)
 	// sign gentx for each validator
 	for _, v := range validators {
 		v := v
-		eg.Go(func() error { return v.InitValidatorFiles(ctx, &chainCfg, genesisAmounts, genesisSelfDelegation) })
+		eg.Go(func() error {
+			return v.InitValidatorFiles(ctx, &chainCfg, genesisAmounts, genesisSelfDelegation, haltHeight)
+		})
 	}
 
 	// just initialize folder for any full nodes
