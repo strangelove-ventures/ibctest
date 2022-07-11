@@ -18,9 +18,11 @@ import (
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"github.com/cosmos/cosmos-sdk/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
+	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
 	dockerclient "github.com/docker/docker/client"
+	"github.com/docker/docker/errdefs"
 	"github.com/docker/go-connections/nat"
 	"github.com/strangelove-ventures/ibctest/ibc"
 	"github.com/strangelove-ventures/ibctest/internal/blockdb"
@@ -587,6 +589,17 @@ func (tn *ChainNode) ExecuteContract(ctx context.Context, keyName string, contra
 	return tn.ExecThenWaitForBlocks(ctx, command)
 }
 
+// TODO use dazzle or read/write config from go with go-toml or BurntSushi/toml
+func (tn *ChainNode) SetHaltHeight(ctx context.Context, height uint64) error {
+	command := []string{
+		"sed", "-i",
+		fmt.Sprintf("/^halt-height = .*/ s//halt-height = \"%d\"/", height),
+		filepath.Join(tn.HomeDir(), "config", "app.toml"),
+	}
+	_, _, err := tn.Exec(ctx, command, nil)
+	return err
+}
+
 func (tn *ChainNode) DumpContractState(ctx context.Context, contractAddress string, height int64) (*ibc.DumpContractStateResponse, error) {
 	command := []string{tn.Chain.Config().Bin,
 		"query", "wasm", "contract-state", "all", contractAddress,
@@ -657,16 +670,18 @@ func (tn *ChainNode) CreateNodeContainer(ctx context.Context) error {
 	if chainCfg.NoHostMount {
 		cmd = []string{"sh", "-c", fmt.Sprintf("cp -r %s %s_nomnt && %s start --home %s_nomnt --x-crisis-skip-assert-invariants", tn.HomeDir(), tn.HomeDir(), chainCfg.Bin, tn.HomeDir())}
 	}
+	imageRef := tn.Image.Ref()
 	tn.logger().
 		Info("Running command",
 			zap.String("command", strings.Join(cmd, " ")),
 			zap.String("container", tn.Name()),
+			zap.String("image", imageRef),
 		)
 
 	cc, err := tn.DockerClient.ContainerCreate(
 		ctx,
 		&container.Config{
-			Image: tn.Image.Ref(),
+			Image: imageRef,
 
 			Entrypoint: []string{},
 			Cmd:        cmd,
@@ -735,18 +750,40 @@ func (tn *ChainNode) StartContainer(ctx context.Context) error {
 	}, retry.Context(ctx), retry.Attempts(40), retry.Delay(3*time.Second), retry.DelayType(retry.FixedDelay))
 }
 
+func (tn *ChainNode) StopContainer(ctx context.Context) error {
+	timeout := 30 * time.Second
+	return tn.DockerClient.ContainerStop(ctx, tn.containerID, &timeout)
+}
+
+func (tn *ChainNode) RemoveContainer(ctx context.Context) error {
+	err := tn.DockerClient.ContainerRemove(ctx, tn.containerID, dockertypes.ContainerRemoveOptions{
+		Force:         true,
+		RemoveVolumes: true,
+	})
+	if err != nil && !errdefs.IsNotFound(err) {
+		return fmt.Errorf("remove container %s: %w", tn.Name(), err)
+	}
+	return nil
+}
+
 // InitValidatorFiles creates the node files and signs a genesis transaction
 func (tn *ChainNode) InitValidatorFiles(
 	ctx context.Context,
 	chainType *ibc.ChainConfig,
 	genesisAmounts []types.Coin,
 	genesisSelfDelegation types.Coin,
+	haltHeight uint64,
 ) error {
 	if err := tn.InitHomeFolder(ctx); err != nil {
 		return err
 	}
 	if err := tn.CreateKey(ctx, valKey); err != nil {
 		return err
+	}
+	if haltHeight != 0 {
+		if err := tn.SetHaltHeight(ctx, haltHeight); err != nil {
+			return err
+		}
 	}
 	key, err := tn.GetKey(valKey)
 	if err != nil {

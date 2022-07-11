@@ -52,6 +52,14 @@ var builtinChainConfigs = map[string]ibc.ChainConfig{
 	"penumbra": penumbra.NewPenumbraChainConfig(),
 }
 
+func BuiltinChainConfig(name string) (ibc.ChainConfig, error) {
+	cfg, ok := builtinChainConfigs[name]
+	if !ok {
+		return ibc.ChainConfig{}, fmt.Errorf("no built-in chain config exists for %s", name)
+	}
+	return cfg, nil
+}
+
 // NewBuiltinChainFactory returns a BuiltinChainFactory that returns chains defined by entries.
 func NewBuiltinChainFactory(log *zap.Logger, specs []*ChainSpec) *BuiltinChainFactory {
 	return &BuiltinChainFactory{log: log, specs: specs}

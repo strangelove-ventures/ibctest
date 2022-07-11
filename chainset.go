@@ -49,13 +49,13 @@ func newChainSet(log *zap.Logger, chains []ibc.Chain) *chainSet {
 // Initialize concurrently calls Initialize against each chain in the set.
 // Each chain may run a docker pull command,
 // so with a cold image cache, running concurrently may save some time.
-func (cs *chainSet) Initialize(testName string, homeDir string, cli *client.Client, networkID string) error {
+func (cs *chainSet) Initialize(testName string, homeDir string, cli *client.Client, networkID string, opts ...ibc.ChainOption) error {
 	var eg errgroup.Group
 
 	for c := range cs.chains {
 		c := c
 		eg.Go(func() error {
-			if err := c.Initialize(testName, homeDir, cli, networkID); err != nil {
+			if err := c.Initialize(testName, homeDir, cli, networkID, opts...); err != nil {
 				return fmt.Errorf("failed to initialize chain %s: %w", c.Config().Name, err)
 			}
 

@@ -195,6 +195,7 @@ func (ic *Interchain) Build(ctx context.Context, rep *testreporter.RelayerExecRe
 	ic.cs = newChainSet(ic.log, chains)
 
 	// Initialize the chains (pull docker images, etc.).
+	// TODO wire ChainOptions into here
 	if err := ic.cs.Initialize(opts.TestName, opts.HomeDir, opts.Client, opts.NetworkID); err != nil {
 		return fmt.Errorf("failed to initialize chains: %w", err)
 	}
