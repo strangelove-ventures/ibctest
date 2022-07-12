@@ -27,10 +27,10 @@ func TestInterchainQueries(t *testing.T) {
 
 	ctx := context.Background()
 
-	// TODO still need to get a docker image pulled into heighliner for simd to avoid this manual configuration
+	// TODO still need to get a docker image pulled into heighliner for icqd to avoid this manual configuration
 	dockerImage := ibc.DockerImage{
 		Repository: "icq",
-		Version:    "393e7fb",
+		Version:    "e21dd75",
 	}
 
 	cf := ibctest.NewBuiltinChainFactory(zaptest.NewLogger(t), []*ibctest.ChainSpec{
@@ -41,7 +41,7 @@ func TestInterchainQueries(t *testing.T) {
 			Images:         []ibc.DockerImage{dockerImage},
 			Bin:            "icq",
 			Bech32Prefix:   "cosmos",
-			Denom:          "photon",
+			Denom:          "atom",
 			GasPrices:      "0.00stake",
 			TrustingPeriod: "300h",
 			GasAdjustment:  1.1,
@@ -53,7 +53,7 @@ func TestInterchainQueries(t *testing.T) {
 			Images:         []ibc.DockerImage{dockerImage},
 			Bin:            "icq",
 			Bech32Prefix:   "cosmos",
-			Denom:          "photon",
+			Denom:          "atom",
 			GasPrices:      "0.00stake",
 			TrustingPeriod: "300h",
 			GasAdjustment:  1.1,
@@ -83,13 +83,14 @@ func TestInterchainQueries(t *testing.T) {
 			Path:    pathName,
 		})
 
+	// Build the network by initializing and starting the chains and creating an IBC path between them.
 	require.NoError(t, ic.Build(ctx, eRep, ibctest.InterchainBuildOptions{
 		TestName:  t.Name(),
 		HomeDir:   home,
 		Client:    client,
 		NetworkID: network,
 
-		SkipPathCreation: false, // skip automatic path creation because it defaults to an ics20 channel
+		SkipPathCreation: false,
 		CreateChannelOpts: ibc.CreateChannelOptions{
 			SourcePortName: "interquery",
 			DestPortName:   "icqhost",
@@ -97,13 +98,6 @@ func TestInterchainQueries(t *testing.T) {
 			Version:        "icq-1",
 		},
 	}))
-
-	//cmd := []string{"icq", "q", "interquery", "params", "--node", chain1.GetRPCAddress(), "--home", chain1.HomeDir()}
-	//stdout, stderr, err := chain1.Exec(ctx, cmd, nil)
-	//require.NoError(t, err)
-	//t.Log(stdout)
-	//t.Log()
-	//t.Log(stderr)
 
 	// Fund user accounts, so we can query balances and make assertions.
 	const userFunds = int64(10_000_000_000)
@@ -137,6 +131,10 @@ func TestInterchainQueries(t *testing.T) {
 		},
 	)
 
+	// Wait a few blocks for the relayer to start.
+	err = test.WaitForBlocks(ctx, 5, chain1, chain2)
+	require.NoError(t, err)
+
 	// Query for the balances of an account on the counterparty chain using IBC queries.
 	chanID := channels[0].Counterparty.ChannelID
 	require.NotEqual(t, "", chanID)
@@ -147,22 +145,38 @@ func TestInterchainQueries(t *testing.T) {
 	user2Addr := user2.Bech32Address(chain2.Config().Bech32Prefix)
 	require.NotEqual(t, "", user2Addr)
 
-	cmd := []string{"icq", "tx", "interquery", "send-query-all-balances", chanID, user2Addr, "--node", chain1.GetRPCAddress(), "--home", chain1.HomeDir(), "--from", user1Addr, "--keyring-dir", chain1.HomeDir(), "--keyring-backend", keyring.BackendTest}
+	cmd := []string{"icq", "tx", "interquery", "send-query-all-balances", chanID, user2Addr,
+		"--node", chain1.GetRPCAddress(),
+		"--home", chain1.HomeDir(),
+		"--chain-id", chain1.Config().ChainID,
+		"--from", user1Addr,
+		"--keyring-dir", chain1.HomeDir(),
+		"--keyring-backend", keyring.BackendTest,
+		"-y",
+	}
 	stdout, stderr, err := chain1.Exec(ctx, cmd, nil)
 	require.NoError(t, err)
-	t.Log(stdout)
-	t.Log()
-	t.Log(stderr)
+
+	t.Logf("stdout: %s \n", stdout)
+	t.Logf("stderr: %s \n", stderr)
 
 	// Wait a few blocks for query to be sent to counterparty.
-	err = test.WaitForBlocks(ctx, 10, chain1, chain2)
+	t.Log("Waiting for blocks...")
+
+	err = test.WaitForBlocks(ctx, 10, chain1)
 	require.NoError(t, err)
 
+	t.Log("Finished waiting for blocks after sending IBC query")
+
 	// Check the results from the IBC query above.
-	cmd = []string{"icq", "query", "interquery", "query-state", strconv.Itoa(1), "--node", chain1.GetRPCAddress(), "--home", chain1.HomeDir()}
+	cmd = []string{"icq", "query", "interquery", "query-state", strconv.Itoa(1),
+		"--node", chain1.GetRPCAddress(),
+		"--home", chain1.HomeDir(),
+		"--chain-id", chain1.Config().ChainID,
+	}
 	stdout, stderr, err = chain1.Exec(ctx, cmd, nil)
 	require.NoError(t, err)
-	t.Log(stdout)
-	t.Log()
-	t.Log(stderr)
+
+	t.Logf("stdout: %s \n", stdout)
+	t.Logf("stderr: %s \n", stderr)
 }
