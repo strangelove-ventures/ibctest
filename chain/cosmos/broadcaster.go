@@ -98,7 +98,7 @@ func (b *Broadcaster) GetClientContext(ctx context.Context, user broadcast.User)
 	if !ok {
 		localDir := b.t.TempDir()
 		containerKeyringDir := filepath.Join(cn.HomeDir(), "keyring-test")
-		kr, err := dockerutil.NewLocalKeyringFromDockerContainer(ctx, cn.DockerClient, localDir, containerKeyringDir, cn.containerID)
+		kr, err := dockerutil.NewLocalKeyringFromDockerContainer(ctx, cn.DockerClient, localDir, containerKeyringDir, cn.containerID, ctx)
 		if err != nil {
 			return client.Context{}, err
 		}
@@ -129,7 +129,7 @@ func (b *Broadcaster) GetTxResponseBytes(ctx context.Context, user broadcast.Use
 // instance of sdk.TxResponse.
 func (b *Broadcaster) UnmarshalTxResponseBytes(ctx context.Context, bytes []byte) (sdk.TxResponse, error) {
 	resp := sdk.TxResponse{}
-	if err := defaultEncoding.Marshaler.UnmarshalJSON(bytes, &resp); err != nil {
+	if err := defaultEncoding.Codec.UnmarshalJSON(bytes, &resp); err != nil {
 		return sdk.TxResponse{}, err
 	}
 	return resp, nil
@@ -150,7 +150,7 @@ func (b *Broadcaster) defaultClientContext(fromUser broadcast.User, sdkAdd sdk.A
 		WithAccountRetriever(authtypes.AccountRetriever{}).
 		WithKeyring(kr).
 		WithBroadcastMode(flags.BroadcastBlock).
-		WithCodec(defaultEncoding.Marshaler).
+		WithCodec(defaultEncoding.Codec).
 		WithHomeDir(cn.Home)
 
 }

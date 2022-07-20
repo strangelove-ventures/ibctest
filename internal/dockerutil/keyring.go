@@ -2,6 +2,7 @@ package dockerutil
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"context"
 	"io"
@@ -15,7 +16,7 @@ import (
 
 // NewLocalKeyringFromDockerContainer copies the contents of the given container directory into a specified local directory.
 // This allows test hosts to sign transactions on behalf of test users.
-func NewLocalKeyringFromDockerContainer(ctx context.Context, dc *client.Client, localDirectory, containerKeyringDir, containerId string) (keyring.Keyring, error) {
+func NewLocalKeyringFromDockerContainer(ctx context.Context, dc *client.Client, localDirectory, containerKeyringDir, containerId string, clientCtx context.Context) (keyring.Keyring, error) {
 	reader, _, err := dc.CopyFromContainer(ctx, containerId, containerKeyringDir)
 	if err != nil {
 		return nil, err
@@ -51,5 +52,8 @@ func NewLocalKeyringFromDockerContainer(ctx context.Context, dc *client.Client, 
 			return nil, err
 		}
 	}
-	return keyring.New("", keyring.BackendTest, localDirectory, os.Stdin)
+
+	inBuf := bufio.NewReader(cmd.InOrStdin())
+
+	return keyring.New("", keyring.BackendTest, localDirectory, os.Stdin, inBuf, clientCtx.Codec)
 }

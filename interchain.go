@@ -313,7 +313,7 @@ func (ic *Interchain) generateRelayerWallets() {
 		panic(fmt.Errorf("cannot call generateRelayerWallets more than once"))
 	}
 
-	kr := keyring.NewInMemory()
+	var kr keyring.Keyring
 
 	relayerChains := ic.relayerChains()
 	ic.relayerWallets = make(map[relayerChain]ibc.RelayerWallet, len(relayerChains))
@@ -383,9 +383,13 @@ func buildWallet(kr keyring.Keyring, keyName string, config ibc.ChainConfig) ibc
 	if err != nil {
 		panic(fmt.Errorf("failed to create mnemonic: %w", err))
 	}
+	address, err := info.GetAddress()
+	if err != nil {
+		panic(fmt.Errorf("failed to get address: %w", err))
+	}
 
 	return ibc.RelayerWallet{
-		Address: types.MustBech32ifyAddressBytes(config.Bech32Prefix, info.GetAddress().Bytes()),
+		Address: types.MustBech32ifyAddressBytes(config.Bech32Prefix, address.Bytes()),
 
 		Mnemonic: mnemonic,
 	}

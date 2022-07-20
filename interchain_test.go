@@ -190,7 +190,7 @@ func TestInterchain_CreateUser(t *testing.T) {
 
 	t.Run("with mnemonic", func(t *testing.T) {
 		keyName := "mnemonic-user-name"
-		kr := keyring.NewInMemory()
+		var kr keyring.Keyring
 		_, mnemonic, err := kr.NewMnemonic(
 			keyName,
 			keyring.English,
