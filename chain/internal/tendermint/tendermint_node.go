@@ -314,6 +314,7 @@ func (tn *TendermintNode) Exec(ctx context.Context, cmd []string, env []string) 
 	opts := dockerutil.ContainerOptions{
 		Env:   env,
 		Binds: tn.Bind(),
+		Tail:  dockerutil.LogTailDefault,
 	}
 	return job.Run(ctx, cmd, opts)
 }

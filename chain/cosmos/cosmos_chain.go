@@ -97,7 +97,7 @@ func (c *CosmosChain) getFullNode() *ChainNode {
 
 // Exec implements ibc.Chain.
 func (c *CosmosChain) Exec(ctx context.Context, cmd []string, env []string) (stdout, stderr []byte, err error) {
-	return c.getFullNode().Exec(ctx, cmd, env)
+	return c.getFullNode().Exec(ctx, cmd, env, dockerutil.LogTailAll)
 }
 
 // Implements Chain interface
@@ -371,17 +371,17 @@ func (c *CosmosChain) Start(testName string, ctx context.Context, additionalGene
 	chainCfg := c.Config()
 
 	genesisAmount := types.Coin{
-		Amount: types.NewInt(1000000000000),
+		Amount: types.NewInt(1_000_000_000_000),
 		Denom:  chainCfg.Denom,
 	}
 
 	genesisStakeAmount := types.Coin{
-		Amount: types.NewInt(1000000000000),
+		Amount: types.NewInt(1_000_000_000_000),
 		Denom:  "stake",
 	}
 
 	genesisSelfDelegation := types.Coin{
-		Amount: types.NewInt(100000000000),
+		Amount: types.NewInt(100_000_000_000),
 		Denom:  "stake",
 	}
 

@@ -108,7 +108,7 @@ func (c *PenumbraChain) Initialize(testName string, homeDirectory string, cli *c
 
 // Exec implements chain interface.
 func (c *PenumbraChain) Exec(ctx context.Context, cmd []string, env []string) (stdout, stderr []byte, err error) {
-	return c.getRelayerNode().PenumbraAppNode.Exec(ctx, cmd, env)
+	return c.getRelayerNode().PenumbraAppNode.Exec(ctx, cmd, env, dockerutil.LogTailAll)
 }
 
 func (c *PenumbraChain) getRelayerNode() PenumbraNode {

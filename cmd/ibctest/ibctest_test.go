@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
@@ -50,7 +49,6 @@ var testMatrix struct {
 var debugFlagSet = flag.NewFlagSet("debug", flag.ExitOnError)
 
 func TestMain(m *testing.M) {
-	rand.Seed(time.Now().UnixNano())
 	addFlags()
 	parseFlags()
 

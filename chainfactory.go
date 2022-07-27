@@ -6,6 +6,7 @@ import (
 
 	"github.com/strangelove-ventures/ibctest/chain/cosmos"
 	"github.com/strangelove-ventures/ibctest/chain/penumbra"
+	"github.com/strangelove-ventures/ibctest/chain/polkadot"
 	"github.com/strangelove-ventures/ibctest/ibc"
 	"github.com/strangelove-ventures/ibctest/label"
 	"go.uber.org/zap"
@@ -44,12 +45,13 @@ type BuiltinChainFactory struct {
 // builtinChainConfigs is a mapping of valid builtin chain names
 // to their predefined ibc.ChainConfig.
 var builtinChainConfigs = map[string]ibc.ChainConfig{
-	"gaia":     cosmos.NewCosmosHeighlinerChainConfig("gaia", "gaiad", "cosmos", "uatom", "0.01uatom", 1.3, "504h", false),
-	"osmosis":  cosmos.NewCosmosHeighlinerChainConfig("osmosis", "osmosisd", "osmo", "uosmo", "0.0uosmo", 1.3, "336h", false),
-	"juno":     cosmos.NewCosmosHeighlinerChainConfig("juno", "junod", "juno", "ujuno", "0.0025ujuno", 1.3, "672h", false),
-	"agoric":   cosmos.NewCosmosHeighlinerChainConfig("agoric", "agd", "agoric", "urun", "0.01urun", 1.3, "672h", true),
-	"icad":     cosmos.NewCosmosHeighlinerChainConfig("icad", "icad", "cosmos", "photon", "0.00photon", 1.2, "504h", false),
-	"penumbra": penumbra.NewPenumbraChainConfig(),
+	"gaia":       cosmos.NewCosmosHeighlinerChainConfig("gaia", "gaiad", "cosmos", "uatom", "0.01uatom", 1.3, "504h", false),
+	"osmosis":    cosmos.NewCosmosHeighlinerChainConfig("osmosis", "osmosisd", "osmo", "uosmo", "0.0uosmo", 1.3, "336h", false),
+	"juno":       cosmos.NewCosmosHeighlinerChainConfig("juno", "junod", "juno", "ujuno", "0.0025ujuno", 1.3, "672h", false),
+	"agoric":     cosmos.NewCosmosHeighlinerChainConfig("agoric", "agd", "agoric", "urun", "0.01urun", 1.3, "672h", true),
+	"icad":       cosmos.NewCosmosHeighlinerChainConfig("icad", "icad", "cosmos", "photon", "0.00photon", 1.2, "504h", false),
+	"penumbra":   penumbra.NewPenumbraChainConfig(),
+	"composable": polkadot.NewComposableChainConfig(),
 }
 
 // NewBuiltinChainFactory returns a BuiltinChainFactory that returns chains defined by entries.
@@ -104,6 +106,20 @@ func buildChain(log *zap.Logger, testName string, cfg ibc.ChainConfig, numValida
 		return cosmos.NewCosmosChain(testName, cfg, nv, nf, log), nil
 	case "penumbra":
 		return penumbra.NewPenumbraChain(log, testName, cfg, nv, nf), nil
+	case "polkadot":
+		switch {
+		case strings.Contains(cfg.Name, "composable"):
+			parachains := []polkadot.ParachainConfig{{
+				Bin:             "composable",
+				ChainID:         "dali-dev",
+				Image:           cfg.Images[1],
+				NumNodes:        nf,
+				RelayChainFlags: []string{"--execution=wasm"},
+			}}
+			return polkadot.NewPolkadotChain(log, testName, cfg, nv, parachains), nil
+		default:
+			return nil, fmt.Errorf("unexpected error, unknown polkadot parachain: %s", cfg.Name)
+		}
 	default:
 		return nil, fmt.Errorf("unexpected error, unknown chain type: %s for chain: %s", cfg.Type, cfg.Name)
 	}

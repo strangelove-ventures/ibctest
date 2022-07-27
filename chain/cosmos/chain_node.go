@@ -329,7 +329,7 @@ func (tn *ChainNode) InitHomeFolder(ctx context.Context) error {
 		"--chain-id", tn.Chain.Config().ChainID,
 		"--home", tn.HomeDir(),
 	}
-	_, _, err := tn.Exec(ctx, command, nil)
+	_, _, err := tn.Exec(ctx, command, nil, dockerutil.LogTailDefault)
 	return err
 }
 
@@ -342,7 +342,7 @@ func (tn *ChainNode) CreateKey(ctx context.Context, name string) error {
 	}
 	tn.lock.Lock()
 	defer tn.lock.Unlock()
-	_, _, err := tn.Exec(ctx, command, nil)
+	_, _, err := tn.Exec(ctx, command, nil, dockerutil.LogTailDefault)
 	return err
 }
 
@@ -355,7 +355,7 @@ func (tn *ChainNode) RecoverKey(ctx context.Context, keyName, mnemonic string) e
 	}
 	tn.lock.Lock()
 	defer tn.lock.Unlock()
-	_, _, err := tn.Exec(ctx, command, nil)
+	_, _, err := tn.Exec(ctx, command, nil, dockerutil.LogTailDefault)
 	return err
 }
 
@@ -379,7 +379,7 @@ func (tn *ChainNode) AddGenesisAccount(ctx context.Context, address string, gene
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
-	_, _, err := tn.Exec(ctx, command, nil)
+	_, _, err := tn.Exec(ctx, command, nil, dockerutil.LogTailDefault)
 	return err
 }
 
@@ -392,7 +392,7 @@ func (tn *ChainNode) Gentx(ctx context.Context, name string, genesisSelfDelegati
 	}
 	tn.lock.Lock()
 	defer tn.lock.Unlock()
-	_, _, err := tn.Exec(ctx, command, nil)
+	_, _, err := tn.Exec(ctx, command, nil, dockerutil.LogTailDefault)
 	return err
 }
 
@@ -403,7 +403,7 @@ func (tn *ChainNode) CollectGentxs(ctx context.Context) error {
 	}
 	tn.lock.Lock()
 	defer tn.lock.Unlock()
-	_, _, err := tn.Exec(ctx, command, nil)
+	_, _, err := tn.Exec(ctx, command, nil, dockerutil.LogTailDefault)
 	return err
 }
 
@@ -433,7 +433,7 @@ func (tn *ChainNode) SendIBCTransfer(ctx context.Context, channelID string, keyN
 	}
 	tn.lock.Lock()
 	defer tn.lock.Unlock()
-	stdout, _, err := tn.Exec(ctx, command, nil)
+	stdout, _, err := tn.Exec(ctx, command, nil, dockerutil.LogTailAll)
 	if err != nil {
 		return "", err
 	}
@@ -462,7 +462,7 @@ func (tn *ChainNode) SendFunds(ctx context.Context, keyName string, amount ibc.W
 func (tn *ChainNode) ExecThenWaitForBlocks(ctx context.Context, command []string) error {
 	tn.lock.Lock()
 	defer tn.lock.Unlock()
-	_, _, err := tn.Exec(ctx, command, nil)
+	_, _, err := tn.Exec(ctx, command, nil, dockerutil.LogTailDefault)
 	if err != nil {
 		return err
 	}
@@ -521,7 +521,7 @@ func (tn *ChainNode) InstantiateContract(ctx context.Context, keyName string, am
 	}
 	tn.lock.Lock()
 	defer tn.lock.Unlock()
-	if _, _, err := tn.Exec(ctx, command, nil); err != nil {
+	if _, _, err := tn.Exec(ctx, command, nil, dockerutil.LogTailDefault); err != nil {
 		return "", err
 	}
 
@@ -538,7 +538,7 @@ func (tn *ChainNode) InstantiateContract(ctx context.Context, keyName string, am
 		"--chain-id", tn.Chain.Config().ChainID,
 	}
 
-	stdout, _, err := tn.Exec(ctx, command, nil)
+	stdout, _, err := tn.Exec(ctx, command, nil, dockerutil.LogTailAll)
 	if err != nil {
 		return "", err
 	}
@@ -568,7 +568,7 @@ func (tn *ChainNode) InstantiateContract(ctx context.Context, keyName string, am
 		command = append(command, "--no-admin")
 	}
 
-	_, _, err = tn.Exec(ctx, command, nil)
+	_, _, err = tn.Exec(ctx, command, nil, dockerutil.LogTailDefault)
 	if err != nil {
 		return "", err
 	}
@@ -586,7 +586,7 @@ func (tn *ChainNode) InstantiateContract(ctx context.Context, keyName string, am
 		"--chain-id", tn.Chain.Config().ChainID,
 	}
 
-	stdout, _, err = tn.Exec(ctx, command, nil)
+	stdout, _, err = tn.Exec(ctx, command, nil, dockerutil.LogTailAll)
 	if err != nil {
 		return "", err
 	}
@@ -625,7 +625,7 @@ func (tn *ChainNode) DumpContractState(ctx context.Context, contractAddress stri
 		"--home", tn.HomeDir(),
 		"--chain-id", tn.Chain.Config().ChainID,
 	}
-	stdout, _, err := tn.Exec(ctx, command, nil)
+	stdout, _, err := tn.Exec(ctx, command, nil, dockerutil.LogTailAll)
 	if err != nil {
 		return nil, err
 	}
@@ -643,7 +643,7 @@ func (tn *ChainNode) ExportState(ctx context.Context, height int64) (string, err
 		"--height", fmt.Sprint(height),
 		"--home", tn.HomeDir(),
 	}
-	_, stderr, err := tn.Exec(ctx, command, nil)
+	_, stderr, err := tn.Exec(ctx, command, nil, dockerutil.LogTailAll)
 	if err != nil {
 		return "", err
 	}
@@ -657,7 +657,7 @@ func (tn *ChainNode) UnsafeResetAll(ctx context.Context) error {
 		"--home", tn.HomeDir(),
 	}
 
-	_, _, err := tn.Exec(ctx, command, nil)
+	_, _, err := tn.Exec(ctx, command, nil, dockerutil.LogTailDefault)
 	return err
 }
 
@@ -818,7 +818,7 @@ func (tn *ChainNode) KeyBech32(ctx context.Context, name string) (string, error)
 		"--keyring-backend", keyring.BackendTest,
 	}
 
-	stdout, stderr, err := tn.Exec(ctx, command, nil)
+	stdout, stderr, err := tn.Exec(ctx, command, nil, dockerutil.LogTailAll)
 	if err != nil {
 		return "", fmt.Errorf("failed to show key %q (stderr=%q): %w", name, stderr, err)
 	}
@@ -868,11 +868,12 @@ func (nodes ChainNodes) logger() *zap.Logger {
 	return nodes[0].logger()
 }
 
-func (tn *ChainNode) Exec(ctx context.Context, cmd []string, env []string) ([]byte, []byte, error) {
+func (tn *ChainNode) Exec(ctx context.Context, cmd []string, env []string, tail uint64) ([]byte, []byte, error) {
 	job := dockerutil.NewImage(tn.logger(), tn.DockerClient, tn.NetworkID, tn.TestName, tn.Image.Repository, tn.Image.Version)
 	opts := dockerutil.ContainerOptions{
 		Env:   env,
 		Binds: tn.Bind(),
+		Tail:  tail,
 	}
 	return job.Run(ctx, cmd, opts)
 }
@@ -896,7 +897,7 @@ func (tn *ChainNode) RegisterICA(ctx context.Context, address, connectionID stri
 		"-y",
 	}
 
-	stdout, _, err := tn.Exec(ctx, command, nil)
+	stdout, _, err := tn.Exec(ctx, command, nil, dockerutil.LogTailAll)
 	if err != nil {
 		return "", err
 	}
@@ -915,7 +916,7 @@ func (tn *ChainNode) QueryICA(ctx context.Context, connectionID, address string)
 		"--home", tn.HomeDir(),
 		"--node", fmt.Sprintf("tcp://%s:26657", tn.Name())}
 
-	stdout, _, err := tn.Exec(ctx, command, nil)
+	stdout, _, err := tn.Exec(ctx, command, nil, dockerutil.LogTailAll)
 	if err != nil {
 		return "", err
 	}
@@ -958,6 +959,6 @@ func (tn *ChainNode) SendICABankTransfer(ctx context.Context, connectionID, from
 		"-y",
 	}
 
-	_, _, err = tn.Exec(ctx, command, nil)
+	_, _, err = tn.Exec(ctx, command, nil, dockerutil.LogTailDefault)
 	return err
 }

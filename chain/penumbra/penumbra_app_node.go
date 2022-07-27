@@ -68,13 +68,13 @@ func (p *PenumbraAppNode) HomeDir() string {
 
 func (p *PenumbraAppNode) CreateKey(ctx context.Context, keyName string) error {
 	cmd := []string{"pcli", "-w", p.WalletPathContainer(), "wallet", "generate"}
-	_, stderr, err := p.Exec(ctx, cmd, nil)
+	_, stderr, err := p.Exec(ctx, cmd, nil, dockerutil.LogTailAll)
 	// already exists error is okay
 	if err != nil && !strings.Contains(string(stderr), "already exists, refusing to overwrite it") {
 		return err
 	}
 	cmd = []string{"pcli", "-w", p.WalletPathContainer(), "addr", "new", keyName}
-	_, _, err = p.Exec(ctx, cmd, nil)
+	_, _, err = p.Exec(ctx, cmd, nil, dockerutil.LogTailDefault)
 	return err
 }
 
@@ -87,7 +87,7 @@ func (p *PenumbraAppNode) InitValidatorFile(ctx context.Context) error {
 		"validator", "template-definition",
 		"--file", p.ValidatorDefinitionTemplateFilePathContainer(),
 	}
-	_, _, err := p.Exec(ctx, cmd, nil)
+	_, _, err := p.Exec(ctx, cmd, nil, dockerutil.LogTailDefault)
 	return err
 }
 
@@ -146,13 +146,13 @@ func (p *PenumbraAppNode) GenerateGenesisFile(
 		"--allocations-input-file", p.AllocationsInputFileContainer(),
 		"--output-dir", p.HomeDir(),
 	}
-	_, _, err = p.Exec(ctx, cmd, nil)
+	_, _, err = p.Exec(ctx, cmd, nil, dockerutil.LogTailDefault)
 	return err
 }
 
 func (p *PenumbraAppNode) GetAddress(ctx context.Context, keyName string) ([]byte, error) {
 	cmd := []string{"pcli", "-w", p.WalletPathContainer(), "addr", "list"}
-	stdout, _, err := p.Exec(ctx, cmd, nil)
+	stdout, _, err := p.Exec(ctx, cmd, nil, dockerutil.LogTailAll)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +172,7 @@ func (p *PenumbraAppNode) GetAddress(ctx context.Context, keyName string) ([]byt
 
 func (p *PenumbraAppNode) GetAddressBech32m(ctx context.Context, keyName string) (string, error) {
 	cmd := []string{"pcli", "-w", p.WalletPathContainer(), "addr", "list"}
-	stdout, _, err := p.Exec(ctx, cmd, nil)
+	stdout, _, err := p.Exec(ctx, cmd, nil, dockerutil.LogTailAll)
 	if err != nil {
 		return "", err
 	}
@@ -259,12 +259,13 @@ func (p *PenumbraAppNode) StartContainer(ctx context.Context) error {
 }
 
 // Exec run a container for a specific job and block until the container exits
-func (p *PenumbraAppNode) Exec(ctx context.Context, cmd []string, env []string) ([]byte, []byte, error) {
+func (p *PenumbraAppNode) Exec(ctx context.Context, cmd []string, env []string, tail uint64) ([]byte, []byte, error) {
 	job := dockerutil.NewImage(p.log, p.DockerClient, p.NetworkID, p.TestName, p.Image.Repository, p.Image.Version)
 	opts := dockerutil.ContainerOptions{
 		Binds: p.Bind(),
 		Env:   env,
 		User:  dockerutil.GetRootUserString(),
+		Tail:  tail,
 	}
 	return job.Run(ctx, cmd, opts)
 }
