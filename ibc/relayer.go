@@ -90,6 +90,10 @@ type Relayer interface {
 	//
 	// "env" are environment variables in the format "MY_ENV_VAR=value"
 	Exec(ctx context.Context, rep RelayerExecReporter, cmd []string, env []string) dockerutil.ContainerExecResult
+
+	// HomeDir is the home directory of a node running in a docker container. Therefore, this maps to
+	// the container's filesystem (not the host).
+	HomeDir() string
 }
 
 // CreateChannelOptions contains the configuration for creating a channel.

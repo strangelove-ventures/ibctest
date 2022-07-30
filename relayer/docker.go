@@ -105,7 +105,7 @@ func NewDockerRelayer(ctx context.Context, log *zap.Logger, testName string, cli
 		return nil, fmt.Errorf("set volume owner: %w", err)
 	}
 
-	if init := r.c.Init(r.NodeHome()); len(init) > 0 {
+	if init := r.c.Init(r.HomeDir()); len(init) > 0 {
 		// Initialization should complete immediately,
 		// but add a 1-minute timeout in case Docker hangs on a developer workstation.
 		ctx, cancel := context.WithTimeout(ctx, time.Minute)
@@ -127,7 +127,7 @@ func (r *DockerRelayer) AddChainConfiguration(ctx context.Context, rep ibc.Relay
 	// Using .config to avoid implying any particular format.
 	chainConfigFile := chainConfig.ChainID + ".config"
 
-	chainConfigContainerFilePath := path.Join(r.NodeHome(), chainConfigFile)
+	chainConfigContainerFilePath := path.Join(r.HomeDir(), chainConfigFile)
 
 	configContent, err := r.c.ConfigContent(ctx, chainConfig, keyName, rpcAddr, grpcAddr)
 	if err != nil {
@@ -143,7 +143,7 @@ func (r *DockerRelayer) AddChainConfiguration(ctx context.Context, rep ibc.Relay
 		return err // Already wrapped.
 	}
 
-	cmd := r.c.AddChainConfiguration(chainConfigContainerFilePath, r.NodeHome())
+	cmd := r.c.AddChainConfiguration(chainConfigContainerFilePath, r.HomeDir())
 
 	// Adding the chain configuration simply reads from a file on disk,
 	// so this should also complete immediately.
@@ -189,7 +189,7 @@ func (r *DockerRelayer) generateConfigTar(relativeConfigPath string, content []b
 }
 
 func (r *DockerRelayer) AddKey(ctx context.Context, rep ibc.RelayerExecReporter, chainID, keyName string) (ibc.RelayerWallet, error) {
-	cmd := r.c.AddKey(chainID, keyName, r.NodeHome())
+	cmd := r.c.AddKey(chainID, keyName, r.HomeDir())
 
 	// Adding a key should be near-instantaneous, so add a 1-minute timeout
 	// to detect if Docker has hung.
@@ -215,43 +215,43 @@ func (r *DockerRelayer) GetWallet(chainID string) (ibc.RelayerWallet, bool) {
 }
 
 func (r *DockerRelayer) CreateChannel(ctx context.Context, rep ibc.RelayerExecReporter, pathName string, opts ibc.CreateChannelOptions) error {
-	cmd := r.c.CreateChannel(pathName, opts, r.NodeHome())
+	cmd := r.c.CreateChannel(pathName, opts, r.HomeDir())
 	res := r.Exec(ctx, rep, cmd, nil)
 	return res.Err
 }
 
 func (r *DockerRelayer) CreateClients(ctx context.Context, rep ibc.RelayerExecReporter, pathName string) error {
-	cmd := r.c.CreateClients(pathName, r.NodeHome())
+	cmd := r.c.CreateClients(pathName, r.HomeDir())
 	res := r.Exec(ctx, rep, cmd, nil)
 	return res.Err
 }
 
 func (r *DockerRelayer) CreateConnections(ctx context.Context, rep ibc.RelayerExecReporter, pathName string) error {
-	cmd := r.c.CreateConnections(pathName, r.NodeHome())
+	cmd := r.c.CreateConnections(pathName, r.HomeDir())
 	res := r.Exec(ctx, rep, cmd, nil)
 	return res.Err
 }
 
 func (r *DockerRelayer) FlushAcknowledgements(ctx context.Context, rep ibc.RelayerExecReporter, pathName, channelID string) error {
-	cmd := r.c.FlushAcknowledgements(pathName, channelID, r.NodeHome())
+	cmd := r.c.FlushAcknowledgements(pathName, channelID, r.HomeDir())
 	res := r.Exec(ctx, rep, cmd, nil)
 	return res.Err
 }
 
 func (r *DockerRelayer) FlushPackets(ctx context.Context, rep ibc.RelayerExecReporter, pathName, channelID string) error {
-	cmd := r.c.FlushPackets(pathName, channelID, r.NodeHome())
+	cmd := r.c.FlushPackets(pathName, channelID, r.HomeDir())
 	res := r.Exec(ctx, rep, cmd, nil)
 	return res.Err
 }
 
 func (r *DockerRelayer) GeneratePath(ctx context.Context, rep ibc.RelayerExecReporter, srcChainID, dstChainID, pathName string) error {
-	cmd := r.c.GeneratePath(srcChainID, dstChainID, pathName, r.NodeHome())
+	cmd := r.c.GeneratePath(srcChainID, dstChainID, pathName, r.HomeDir())
 	res := r.Exec(ctx, rep, cmd, nil)
 	return res.Err
 }
 
 func (r *DockerRelayer) GetChannels(ctx context.Context, rep ibc.RelayerExecReporter, chainID string) ([]ibc.ChannelOutput, error) {
-	cmd := r.c.GetChannels(chainID, r.NodeHome())
+	cmd := r.c.GetChannels(chainID, r.HomeDir())
 
 	// Getting channels should be very quick, but go up to a 3-minute timeout just in case.
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
@@ -266,7 +266,7 @@ func (r *DockerRelayer) GetChannels(ctx context.Context, rep ibc.RelayerExecRepo
 }
 
 func (r *DockerRelayer) GetConnections(ctx context.Context, rep ibc.RelayerExecReporter, chainID string) (ibc.ConnectionOutputs, error) {
-	cmd := r.c.GetConnections(chainID, r.NodeHome())
+	cmd := r.c.GetConnections(chainID, r.HomeDir())
 	res := r.Exec(ctx, rep, cmd, nil)
 	if res.Err != nil {
 		return nil, res.Err
@@ -276,7 +276,7 @@ func (r *DockerRelayer) GetConnections(ctx context.Context, rep ibc.RelayerExecR
 }
 
 func (r *DockerRelayer) LinkPath(ctx context.Context, rep ibc.RelayerExecReporter, pathName string, opts ibc.CreateChannelOptions) error {
-	cmd := r.c.LinkPath(pathName, r.NodeHome(), opts)
+	cmd := r.c.LinkPath(pathName, r.HomeDir(), opts)
 	res := r.Exec(ctx, rep, cmd, nil)
 	return res.Err
 }
@@ -306,7 +306,7 @@ func (r *DockerRelayer) Exec(ctx context.Context, rep ibc.RelayerExecReporter, c
 }
 
 func (r *DockerRelayer) RestoreKey(ctx context.Context, rep ibc.RelayerExecReporter, chainID, keyName, mnemonic string) error {
-	cmd := r.c.RestoreKey(chainID, keyName, mnemonic, r.NodeHome())
+	cmd := r.c.RestoreKey(chainID, keyName, mnemonic, r.HomeDir())
 
 	// Restoring a key should be near-instantaneous, so add a 1-minute timeout
 	// to detect if Docker has hung.
@@ -326,7 +326,7 @@ func (r *DockerRelayer) RestoreKey(ctx context.Context, rep ibc.RelayerExecRepor
 }
 
 func (r *DockerRelayer) UpdateClients(ctx context.Context, rep ibc.RelayerExecReporter, pathName string) error {
-	cmd := r.c.UpdateClients(pathName, r.NodeHome())
+	cmd := r.c.UpdateClients(pathName, r.HomeDir())
 	res := r.Exec(ctx, rep, cmd, nil)
 	return res.Err
 }
@@ -429,7 +429,7 @@ func (r *DockerRelayer) pullContainerImageIfNecessary(containerImage ibc.DockerI
 func (r *DockerRelayer) createNodeContainer(ctx context.Context, pathName string) error {
 	containerImage := r.containerImage()
 	containerName := fmt.Sprintf("%s-%s", r.c.Name(), pathName)
-	cmd := r.c.StartRelayer(pathName, r.NodeHome())
+	cmd := r.c.StartRelayer(pathName, r.HomeDir())
 	r.log.Info(
 		"Running command",
 		zap.String("command", strings.Join(cmd, " ")),
@@ -479,10 +479,11 @@ func (r *DockerRelayer) Name() string {
 
 // Bind returns the home folder bind point for running the node.
 func (r *DockerRelayer) Bind() []string {
-	return []string{r.volumeName + ":" + r.NodeHome()}
+	return []string{r.volumeName + ":" + r.HomeDir()}
 }
 
-func (r *DockerRelayer) NodeHome() string {
+// HomeDir returns the home directory of the relayer on the underlying Docker container's filesystem.
+func (r *DockerRelayer) HomeDir() string {
 	// Relayer writes to these files, so /var seems like a reasonable root.
 	// https://tldp.org/LDP/Linux-Filesystem-Hierarchy/html/var.html
 	return "/var/relayer-" + r.c.Name()
@@ -501,7 +502,7 @@ func (r *DockerRelayer) untarIntoNodeHome(ctx context.Context, tar io.Reader) er
 	return r.runOneOff(ctx, oneOffOptions{
 		ContainerNameDetail: "untar-chown",
 		Entrypoint:          []string{},
-		Cmd:                 []string{"chown", "-R", r.c.DockerUser(), r.NodeHome()},
+		Cmd:                 []string{"chown", "-R", r.c.DockerUser(), r.HomeDir()},
 		User:                dockerutil.GetRootUserString(),
 		TarContent:          tar,
 	})
@@ -566,7 +567,7 @@ func (r *DockerRelayer) runOneOff(ctx context.Context, opts oneOffOptions) error
 		if err := r.client.CopyToContainer(
 			ctx,
 			cc.ID,
-			r.NodeHome(),
+			r.HomeDir(),
 			opts.TarContent,
 			types.CopyToContainerOptions{},
 		); err != nil {
