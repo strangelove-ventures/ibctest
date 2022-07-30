@@ -35,7 +35,6 @@ import (
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	libclient "github.com/tendermint/tendermint/rpc/jsonrpc/client"
 	"go.uber.org/zap"
-	"gopkg.in/yaml.v3"
 )
 
 // ChainNode represents a node in the test network that is being created
@@ -883,82 +882,4 @@ func (tn *ChainNode) logger() *zap.Logger {
 		zap.String("chain_id", tn.Chain.Config().ChainID),
 		zap.String("test", tn.TestName),
 	)
-}
-
-// RegisterICA will attempt to register an interchain account on the counterparty chain.
-func (tn *ChainNode) RegisterICA(ctx context.Context, address, connectionID string) (string, error) {
-	command := []string{tn.Chain.Config().Bin, "tx", "intertx", "register",
-		"--from", address,
-		"--connection-id", connectionID,
-		"--chain-id", tn.Chain.Config().ChainID,
-		"--home", tn.HomeDir(),
-		"--node", fmt.Sprintf("tcp://%s:26657", tn.Name()),
-		"--keyring-backend", keyring.BackendTest,
-		"-y",
-	}
-
-	stdout, _, err := tn.Exec(ctx, command, nil)
-	if err != nil {
-		return "", err
-	}
-	output := IBCTransferTx{}
-	err = yaml.Unmarshal([]byte(stdout), &output)
-	if err != nil {
-		return "", err
-	}
-	return output.TxHash, nil
-}
-
-// QueryICA will query for an interchain account controlled by the specified address on the counterparty chain.
-func (tn *ChainNode) QueryICA(ctx context.Context, connectionID, address string) (string, error) {
-	command := []string{tn.Chain.Config().Bin, "query", "intertx", "interchainaccounts", connectionID, address,
-		"--chain-id", tn.Chain.Config().ChainID,
-		"--home", tn.HomeDir(),
-		"--node", fmt.Sprintf("tcp://%s:26657", tn.Name())}
-
-	stdout, _, err := tn.Exec(ctx, command, nil)
-	if err != nil {
-		return "", err
-	}
-
-	// at this point stdout should look like this:
-	// interchain_account_address: cosmos1p76n3mnanllea4d3av0v0e42tjj03cae06xq8fwn9at587rqp23qvxsv0j
-	// we split the string at the : and then just grab the address before returning.
-	parts := strings.SplitN(string(stdout), ":", 2)
-	if len(parts) < 2 {
-		return "", fmt.Errorf("malformed stdout from command: %s", stdout)
-	}
-	return strings.TrimSpace(parts[1]), nil
-}
-
-// SendICABankTransfer builds a bank transfer message for a specified address and sends it to the specified
-// interchain account.
-func (tn *ChainNode) SendICABankTransfer(ctx context.Context, connectionID, fromAddr string, amount ibc.WalletAmount) error {
-	msg, err := json.Marshal(map[string]any{
-		"@type":        "/cosmos.bank.v1beta1.MsgSend",
-		"from_address": fromAddr,
-		"to_address":   amount.Address,
-		"amount": []map[string]any{
-			{
-				"denom":  amount.Denom,
-				"amount": amount.Amount,
-			},
-		},
-	})
-	if err != nil {
-		return err
-	}
-
-	command := []string{tn.Chain.Config().Bin, "tx", "intertx", "submit", string(msg),
-		"--connection-id", connectionID,
-		"--from", fromAddr,
-		"--chain-id", tn.Chain.Config().ChainID,
-		"--home", tn.HomeDir(),
-		"--node", fmt.Sprintf("tcp://%s:26657", tn.Name()),
-		"--keyring-backend", keyring.BackendTest,
-		"-y",
-	}
-
-	_, _, err = tn.Exec(ctx, command, nil)
-	return err
 }

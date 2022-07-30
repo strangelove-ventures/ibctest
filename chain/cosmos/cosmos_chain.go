@@ -490,22 +490,6 @@ func (c *CosmosChain) Height(ctx context.Context) (uint64, error) {
 	return c.getFullNode().Height(ctx)
 }
 
-// RegisterInterchainAccount will register an interchain account on behalf of the calling chain (controller chain)
-// on the counterparty chain (the host chain).
-func (c *CosmosChain) RegisterInterchainAccount(ctx context.Context, keyName, connectionID string) (string, error) {
-	return c.getFullNode().RegisterICA(ctx, keyName, connectionID)
-}
-
-// SendICABankTransfer will send a bank transfer msg from the fromAddr to the specified address for the given amount and denom.
-func (c *CosmosChain) SendICABankTransfer(ctx context.Context, connectionID, fromAddr string, amount ibc.WalletAmount) error {
-	return c.getFullNode().SendICABankTransfer(ctx, connectionID, fromAddr, amount)
-}
-
-// QueryInterchainAccount will query the interchain account that was created on behalf of the specified address.
-func (c *CosmosChain) QueryInterchainAccount(ctx context.Context, connectionID, address string) (string, error) {
-	return c.getFullNode().QueryICA(ctx, connectionID, address)
-}
-
 // Acknowledgements implements ibc.Chain, returning all acknowledgments in block at height
 func (c *CosmosChain) Acknowledgements(ctx context.Context, height uint64) ([]ibc.PacketAcknowledgement, error) {
 	var acks []*chanTypes.MsgAcknowledgement
